@@ -10,6 +10,25 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+// Utility to clean Markdown code blocks from JSON response
+const cleanJson = (text: string): string => {
+  if (!text) return "{}";
+  
+  // Robust extraction of JSON object
+  const firstOpen = text.indexOf('{');
+  const lastClose = text.lastIndexOf('}');
+  
+  if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+    return text.substring(firstOpen, lastClose + 1);
+  }
+  
+  // Fallback cleanup
+  let clean = text.trim();
+  clean = clean.replace(/^```json\s*/, '').replace(/^```\s*/, '');
+  clean = clean.replace(/\s*```$/, '');
+  return clean;
+};
+
 // --- CORE GAME HERO GENERATION ---
 
 // Generates the JSON data for a hero
@@ -36,18 +55,27 @@ export const generateHeroData = async (prompt: string): Promise<Hero> => {
     throw new Error("Keine Daten von Gemini erhalten.");
   }
 
-  const data = JSON.parse(response.text);
+  const cleanText = cleanJson(response.text);
+  let data;
+  try {
+    data = JSON.parse(cleanText);
+  } catch (e) {
+    console.error("JSON Parse Error:", cleanText);
+    throw new Error("KI-Antwort konnte nicht verarbeitet werden.");
+  }
   
-  // Add a temporary ID and placeholder image until generated
+  // Generate Image
+  const imageUrl = await generateHeroImage(data.description || data.name);
+
   return {
     ...data,
     id: crypto.randomUUID(),
-    image: { url: '' } // To be filled by the second step
+    image: { url: imageUrl } 
   };
 };
 
 // Transforms an existing external hero into a unique IP
-// NOW WITH RADICAL REIMAGINING LOGIC
+// NOW WITH RADICAL REIMAGINING LOGIC AND IMAGE GENERATION
 export const transformHero = async (externalHero: ExternalHero): Promise<Hero> => {
   const ai = getAiClient();
 
@@ -90,12 +118,22 @@ export const transformHero = async (externalHero: ExternalHero): Promise<Hero> =
     throw new Error("Keine Daten von Gemini erhalten.");
   }
 
-  const data = JSON.parse(response.text);
+  const cleanText = cleanJson(response.text);
+  let data;
+  try {
+    data = JSON.parse(cleanText);
+  } catch (e) {
+    console.error("JSON Parse Error for Hero:", cleanText);
+    throw new Error("KI-Antwort fehlerhaft formatiert: " + cleanText.substring(0, 50) + "...");
+  }
+
+  // Generate the visual representation based on the new description
+  const imageUrl = await generateHeroImage(data.appearance.race + " " + data.description);
 
   return {
     ...data,
     id: crypto.randomUUID(),
-    image: { url: '' }
+    image: { url: imageUrl }
   };
 };
 
@@ -136,19 +174,33 @@ export const generateStrategicAdvice = async (gameState: GameState): Promise<{ t
   });
 
   if (!response.text) return { title: 'Fehler', advice: 'Meine Schaltkreise weigern sich, mit dir zu reden.', priority: 'low' };
-  return JSON.parse(response.text);
+  
+  try {
+      return JSON.parse(cleanJson(response.text));
+  } catch (e) {
+      return { title: 'Fehler', advice: 'Fehler bei der Datenübertragung.', priority: 'low' };
+  }
 };
 
 
 // Generates the visual representation of the hero (Basic generation)
 export const generateHeroImage = async (heroDescription: string): Promise<string> => {
   const ai = getAiClient();
-  const prompt = `Ein episches Comic-Cover-Bild eines Superhelden. Stil: Modernes amerikanisches Comic-Buch, detailliert, lebhafte Farben. Charakter Beschreibung: ${heroDescription}`;
+  
+  // UNIFIED STYLE PROMPT
+  // This ensures all heroes look like they belong in the same high-end game.
+  const stylePrompt = `
+    Portrait shot of a superhero, looking slightly off-camera.
+    Style: High-end Cinematic Digital Art, Blizzard Cinematic Style, detailed textures.
+    Atmosphere: Dark sci-fi background with neon rim lighting (cyan and purple accents).
+    Quality: 8k resolution, highly detailed armor/clothing, sharp focus on face.
+    Character details: ${heroDescription}.
+  `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: prompt,
+      contents: stylePrompt,
     });
 
     const candidates = response.candidates;
@@ -164,6 +216,57 @@ export const generateHeroImage = async (heroDescription: string): Promise<string
     console.error("Fehler bei der Bildgenerierung:", error);
     return "https://picsum.photos/400/600";
   }
+};
+
+// --- NEW: ANIMATE HERO PORTRAIT (Veo) ---
+export const animateHeroPortrait = async (imageBase64: string, mimeType: string): Promise<string> => {
+    const ai = getAiClient();
+
+    // Veo needs a key selection flow usually, checking if wrapper exists
+    // @ts-ignore
+    if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+         // @ts-ignore
+        if (!await window.aistudio.hasSelectedApiKey()) {
+             // @ts-ignore
+            await window.aistudio.openSelectKey();
+        }
+    }
+
+    const prompt = "The character comes to life, looks directly at the camera, breathes slowly, and makes a subtle heroic gesture. Cinematic lighting, high quality, 4k, loopable motion.";
+
+    try {
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            image: {
+                imageBytes: imageBase64,
+                mimeType: mimeType
+            },
+            prompt: prompt,
+            config: {
+                numberOfVideos: 1,
+                resolution: '720p',
+                aspectRatio: '1:1' // Matches the square portrait usually
+            }
+        });
+
+        // Poll for completion
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+
+        const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (!videoUri) throw new Error("Kein Video generiert.");
+
+        // Fetch the actual bytes using the API key
+        const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+
+    } catch (e: any) {
+        console.error("Animation Error:", e);
+        throw new Error("Animation fehlgeschlagen: " + e.message);
+    }
 };
 
 // --- ADVANCED AI FEATURES ---

@@ -7,7 +7,8 @@ interface GameContextType {
   startUpgrade: (buildingId: string) => void;
   speedUpBuilding: (buildingId: string, seconds: number) => void;
   collectResources: () => void;
-  debugAddResources: () => void; // Helper for testing
+  deductResources: (cost: Partial<Resources>) => boolean;
+  debugAddResources: () => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -103,11 +104,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return b;
         });
 
-        // Passive Resource Generation (Tick-based addition for UI liveliness)
-        // Note: Usually better to only update on "Collect", but for now we update state for visuals
-        // To prevent React render trashing, we might want to decouple UI numbers from real state later.
-        // For Phase 1, we rely on the Offline Calc for big chunks and manual Collection for gameplay interaction.
-
         if (hasChanges) {
           return { ...prev, buildings: newBuildings };
         }
@@ -180,9 +176,29 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const collectResources = () => {
-    // Logic for clicking bubbles on buildings
-    // For Phase 1, just a stub or global collection
     console.log("Collecting resources...");
+  };
+
+  const deductResources = (cost: Partial<Resources>): boolean => {
+      let canAfford = true;
+      if (cost.credits && state.resources.credits < cost.credits) canAfford = false;
+      if (cost.nanosteel && state.resources.nanosteel < cost.nanosteel) canAfford = false;
+      if (cost.biomass && state.resources.biomass < cost.biomass) canAfford = false;
+      if (cost.gems && state.resources.gems < cost.gems) canAfford = false;
+
+      if (!canAfford) return false;
+
+      setState(prev => ({
+          ...prev,
+          resources: {
+              credits: prev.resources.credits - (cost.credits || 0),
+              nanosteel: prev.resources.nanosteel - (cost.nanosteel || 0),
+              biomass: prev.resources.biomass - (cost.biomass || 0),
+              gems: prev.resources.gems - (cost.gems || 0),
+              dark_matter: prev.resources.dark_matter - (cost.dark_matter || 0),
+          }
+      }));
+      return true;
   };
 
   const debugAddResources = () => {
@@ -199,7 +215,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <GameContext.Provider value={{ state, startUpgrade, speedUpBuilding, collectResources, debugAddResources }}>
+    <GameContext.Provider value={{ state, startUpgrade, speedUpBuilding, collectResources, deductResources, debugAddResources }}>
       {children}
     </GameContext.Provider>
   );

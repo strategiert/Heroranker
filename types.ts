@@ -48,6 +48,9 @@ export interface Hero {
   image: {
     url: string; // URL or Base64 string
   };
+  video?: {
+    url: string; // URL to the Veo generated MP4
+  };
   description?: string; // Short AI generated summary
 }
 
