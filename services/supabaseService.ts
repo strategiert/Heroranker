@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { ExternalHero, Hero } from '../types';
+import { GameState } from '../types/economy';
+import { InventoryState } from '../context/InventoryContext';
+import { SpireState } from '../context/SpireContext';
 
 // Safe environment access for browser environments
 const getEnv = (key: string) => {
@@ -24,21 +27,37 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 
 export const REQUIRED_TABLE_NAME = 'superheroes_raw';
 export const MY_HEROES_TABLE = 'my_heroes';
+export const SAVE_GAME_TABLE = 'save_games';
 
 export const SCHEMA_SQL = `
--- KORREKTUR-SKRIPT
--- Deine aktuelle Tabelle 'my_heroes' hat wahrscheinlich die falsche Struktur (keine 'data' Spalte).
--- Führe dieses Skript im Supabase SQL Editor aus.
+-- SYSTEM REPAIR SCRIPT
+-- Führe dieses Skript im Supabase SQL Editor aus, um die Datenbank zu reparieren.
 
--- 1. Falsche Tabelle löschen
-DROP TABLE IF EXISTS "my_heroes";
-
--- 2. Korrekte Tabelle erstellen
-CREATE TABLE "my_heroes" (
-    id text primary key,
-    data jsonb,
-    created_at timestamptz default now()
+-- 1. Tabelle 'my_heroes' (Deine Armee)
+DROP TABLE IF EXISTS my_heroes;
+CREATE TABLE my_heroes (
+    id text PRIMARY KEY,                   -- Eindeutige ID des Helden
+    data jsonb NOT NULL DEFAULT '{}'::jsonb, -- Alle Heldendaten als JSON
+    created_at timestamptz DEFAULT now()   -- Erstellungsdatum
 );
+
+ALTER TABLE my_heroes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Heroes Access" ON my_heroes FOR ALL USING (true) WITH CHECK (true);
+
+-- 2. Tabelle 'save_games' (Basis, Inventar, Spire)
+DROP TABLE IF EXISTS save_games;
+CREATE TABLE save_games (
+    user_id text PRIMARY KEY,              -- Eindeutige ID des Spielers (Browser-Instanz)
+    game_state jsonb DEFAULT '{}'::jsonb,  -- Basis-Daten (Gebäude, Ressourcen)
+    inventory_state jsonb DEFAULT '{}'::jsonb, -- Inventar (Items, Ausrüstung)
+    spire_state jsonb DEFAULT '{}'::jsonb, -- Turm-Fortschritt (Floor, Highscore)
+    updated_at timestamptz DEFAULT now()   -- Zeitstempel der letzten Speicherung
+);
+
+ALTER TABLE save_games ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Save Access" ON save_games FOR ALL USING (true) WITH CHECK (true);
+
+-- System Status: BEREIT
 `;
 
 export const listTables = async (): Promise<string[]> => {
@@ -143,7 +162,7 @@ export const fetchRawHeroes = async (limit = 1000, offset = 0): Promise<External
   return Array.from(uniqueHeroes.values());
 };
 
-// --- NEW FUNCTIONS FOR MY HEROES ---
+// --- HEROES SYNC ---
 
 export const fetchMyHeroes = async (): Promise<Hero[]> => {
     const { data, error } = await supabase
@@ -158,7 +177,7 @@ export const fetchMyHeroes = async (): Promise<Hero[]> => {
         }
         if (error.code === 'PGRST205' || error.code === '42P01') {
             console.warn(`Tabelle '${MY_HEROES_TABLE}' noch nicht erstellt.`);
-            return [];
+            throw new Error('TABLE_MISSING');
         }
         console.error("Fetch My Heroes Error:", error.message || JSON.stringify(error));
         throw new Error(`Supabase Error (${error.code}): ${error.message}`);
@@ -187,6 +206,63 @@ export const saveHero = async (hero: Hero): Promise<void> => {
         }
         console.error(`Fehler beim Speichern (${error.code}):`, error.message || JSON.stringify(error));
     }
+};
+
+// --- FULL SAVE GAME SYNC ---
+
+export interface FullSaveData {
+    game: GameState;
+    inventory: InventoryState;
+    spire: Partial<SpireState>;
+}
+
+export const loadSaveGame = async (userId: string): Promise<FullSaveData | null> => {
+    const { data, error } = await supabase
+        .from(SAVE_GAME_TABLE)
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null; // No rows found, new user
+        
+        // Error 42703 = Column does not exist
+        if (error.code === 'PGRST205' || error.code === '42P01' || error.code === '42703') {
+             console.warn(`Tabelle '${SAVE_GAME_TABLE}' defekt oder fehlt. (Fehler: ${error.code})`);
+             return null;
+        }
+        console.error("Load Game Error:", error);
+        return null;
+    }
+
+    return {
+        game: data.game_state,
+        inventory: data.inventory_state,
+        spire: data.spire_state
+    };
+};
+
+export const saveGameToCloud = async (userId: string, data: FullSaveData): Promise<{ success: boolean; error?: any }> => {
+    const { error } = await supabase
+        .from(SAVE_GAME_TABLE)
+        .upsert({
+            user_id: userId,
+            game_state: data.game,
+            inventory_state: data.inventory,
+            spire_state: data.spire,
+            updated_at: new Date().toISOString()
+        });
+
+    if (error) {
+        // Error 42703 means column missing (likely user_id)
+        if (error.code === '42703' || error.code === '42P01') {
+            console.error("CRITICAL: Datenbank-Struktur falsch. Tabelle 'save_games' fehlt die Spalte 'user_id' oder existiert nicht.");
+        } else {
+            console.error("Cloud Save Error:", error);
+        }
+        return { success: false, error };
+    }
+    return { success: true };
 };
 
 export const seedDatabase = async (onProgress?: (msg: string) => void) => {

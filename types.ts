@@ -1,4 +1,5 @@
 
+
 export interface PowerStats {
   intelligence: number;
   strength: number;
@@ -37,6 +38,13 @@ export interface Connections {
   relatives: string;
 }
 
+export interface EquipmentLoadout {
+  weapon?: string; // Item ID
+  armor?: string;
+  chip?: string;
+  propulsion?: string;
+}
+
 export interface Hero {
   id: string;
   name: string;
@@ -52,6 +60,27 @@ export interface Hero {
     url: string; // URL to the Veo generated MP4
   };
   description?: string; // Short AI generated summary
+  equipment?: EquipmentLoadout;
+}
+
+export interface WikiHero {
+  id: number | string;
+  name: string;
+  universe: string;
+  tier: string;
+  power: number;
+  image: string; // Emoji
+  color?: string;
+  abilities: string[];
+  description: string;
+  reason?: string;
+  stats: {
+    intelligence: number;
+    strength: number;
+    speed: number;
+    durability: number;
+    combat: number;
+  };
 }
 
 export interface ExternalHero {
@@ -70,4 +99,25 @@ export interface ExternalHero {
   image?: string;
 }
 
-export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab';
+// --- TOWER TYPES ---
+
+export interface TowerEnemy {
+  name: string;
+  level: number;
+  isBoss: boolean;
+  hp: number;
+  maxHp: number;
+  atk: number;
+  image?: string; // Emoji or URL
+  color?: string;
+}
+
+export interface CombatLog {
+  turn: number;
+  message: string;
+  damage: number;
+  isPlayer: boolean;
+  isCrit: boolean;
+}
+
+export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab' | 'spire' | 'nanoforge';

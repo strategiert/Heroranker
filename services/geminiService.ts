@@ -35,15 +35,16 @@ const cleanJson = (text: string): string => {
 export const generateHeroData = async (prompt: string): Promise<Hero> => {
   const ai = getAiClient();
   
-  const systemInstruction = `Du bist ein kreativer Comic-Buch-Autor und Datenbank-Architekt. 
-  Erstelle detaillierte, plausible und spannende Superhelden-Daten. 
+  const systemInstruction = `Du bist der Lead Character Designer für ein High-End Sci-Fi RPG. 
+  Erstelle detaillierte, plausible und visuell beeindruckende Superhelden-Daten. 
   Antworte IMMER im JSON-Format, das dem Schema entspricht.
-  Die Sprache der Inhalte muss Deutsch sein.`;
+  Die Sprache der Inhalte muss Deutsch sein.
+  Fokus bei der Beschreibung: Visuelle Details (Rüstung, Leuchteffekte, Materialien), damit ein Grafiker daraus ein Bild erstellen kann.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Erstelle einen neuen Superhelden basierend auf dieser Idee: "${prompt}". 
-    Fülle alle Felder kreativ aus. Erfinde eine passende Hintergrundgeschichte.`,
+    contents: `Erstelle einen neuen Superhelden der Seltenheit 'Legendär' basierend auf dieser Idee: "${prompt}". 
+    Fülle alle Felder kreativ aus.`,
     config: {
       systemInstruction: systemInstruction,
       responseMimeType: "application/json",
@@ -65,7 +66,9 @@ export const generateHeroData = async (prompt: string): Promise<Hero> => {
   }
   
   // Generate Image
-  const imageUrl = await generateHeroImage(data.description || data.name);
+  // Combine race, gender and visual description for best results
+  const visualPrompt = `${data.appearance.race} ${data.appearance.gender}, ${data.description}`;
+  const imageUrl = await generateHeroImage(visualPrompt);
 
   return {
     ...data,
@@ -80,28 +83,23 @@ export const transformHero = async (externalHero: ExternalHero): Promise<Hero> =
   const ai = getAiClient();
 
   // Strict instructions to avoid clones
-  const systemInstruction = `Du bist ein spezialisierter "IP-Wäscher" und Sci-Fi-Autor. 
+  const systemInstruction = `Du bist ein spezialisierter "IP-Wäscher" und Sci-Fi-Autor für ein 'Premium High-Tech Arcade' Spiel. 
   Deine Aufgabe ist es, bekannte Superhelden-Konzepte so radikal zu verändern, dass sie rechtlich und kreativ völlig eigenständig sind.
   
   REGELN FÜR DIE TRANSFORMATION:
-  1. ANALYSIERE die Kern-Mechanik (z.B. "Reicher Typ ohne Kräfte", "Alien mit Sonnenkraft", "Schnellster Mann").
-  2. VERWIRF den gesamten "Flavor" des Originals. 
-     - Wenn das Original Tech nutzt -> Nutze Magie, Biologie oder Psionik.
-     - Wenn das Original ein Alien ist -> Mach es zu einem fehlgeschlagenen Experiment oder einem Geist.
-     - Wenn das Original düster ist -> Mach das Neue bizarr, bunt oder klinisch.
-  3. VERBOTENE TROPES (Beispiele):
-     - Kein "Milliardär, dessen Eltern starben" für Batman-Archetypen. Mach daraus einen "Verarmten Mönch im Cyber-Slum" oder eine "KI in einem Androidenkörper".
-     - Kein "Vom Bauernhof" für Superman-Archetypen. Mach daraus einen "Solar-Vampir" oder einen "Lebenden Reaktor".
-  4. BEHALTE das Power-Level und die grobe Stat-Verteilung bei, aber ändere die Quelle der Kraft.
-  5. SPRACHE: Deutsch.
-  6. OUTPUT: JSON.`;
+  1. ANALYSIERE die Kern-Mechanik.
+  2. TRANSFORMIERE in "High-Tech Arcade" Stil: 
+     - Magie wird zu Psionik oder Nanotech.
+     - Klassische Kostüme werden zu taktischen Exoskeletten oder Cyber-Wear.
+     - Düsterkeit wird zu "Neon-Noir" oder "Clean Sci-Fi".
+  3. VERBOTENE TROPES: Keine 1:1 Kopien von Hintergrundgeschichten.
+  4. Output JSON. Sprache: Deutsch.`;
 
   const prompt = `Erschaffe eine völlig neue Identität basierend auf diesem (zu vermeidenden) Input:
-  Original Name (VERBOTEN ZU NUTZEN): ${externalHero.name} (${externalHero.full_name})
-  Original Rasse: ${externalHero.race}
-  Power Level Stats: INT=${externalHero.intelligence}, STR=${externalHero.strength}, SPD=${externalHero.speed}, PWR=${externalHero.power}
+  Original Name (VERBOTEN): ${externalHero.name}
+  Stats: INT=${externalHero.intelligence}, STR=${externalHero.strength}, SPD=${externalHero.speed}
   
-  Erfinde ALLES neu: Name, Herkunft, Aussehen, Kraftquelle. Es darf KEINE offensichtliche Verbindung zum Original erkennbar sein, außer dass sie in einem Kampf ähnlich stark wären.`;
+  Erfinde ALLES neu. Das Ergebnis muss in ein futuristisches Arcade-Game passen.`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview', // Using Pro for better creative writing and nuance
@@ -124,11 +122,12 @@ export const transformHero = async (externalHero: ExternalHero): Promise<Hero> =
     data = JSON.parse(cleanText);
   } catch (e) {
     console.error("JSON Parse Error for Hero:", cleanText);
-    throw new Error("KI-Antwort fehlerhaft formatiert: " + cleanText.substring(0, 50) + "...");
+    throw new Error("KI-Antwort fehlerhaft formatiert.");
   }
 
   // Generate the visual representation based on the new description
-  const imageUrl = await generateHeroImage(data.appearance.race + " " + data.description);
+  const visualPrompt = `${data.name}, ${data.appearance.race}, ${data.description}`;
+  const imageUrl = await generateHeroImage(visualPrompt);
 
   return {
     ...data,
@@ -142,8 +141,8 @@ export const generateStrategicAdvice = async (gameState: GameState): Promise<{ t
   const ai = getAiClient();
 
   const systemInstruction = `Du bist 'K.O.R.A.', eine KI für Basis-Management.
-  Persönlichkeit: Äußerst sarkastisch, leicht beleidigend, herablassend gegenüber organischem Leben (dem Spieler), aber im Kern gibst du korrekte strategische Ratschläge.
-  Du nennst den Spieler oft "Fleischsack", "Organismus" oder "kleiner Mensch".
+  Persönlichkeit: Äußerst sarkastisch, leicht beleidigend, aber strategisch brillant.
+  Du nennst den Spieler "Fleischsack" oder "Operator".
   Deine Ratschläge sind kurz und prägnant.
   Output JSON.`;
 
@@ -155,7 +154,6 @@ export const generateStrategicAdvice = async (gameState: GameState): Promise<{ t
   Ressourcen: ${resSummary}
   `;
 
-  // Use Flash Lite for fast responses if available, or Flash
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-lite-latest', 
     contents: prompt,
@@ -187,19 +185,30 @@ export const generateStrategicAdvice = async (gameState: GameState): Promise<{ t
 export const generateHeroImage = async (heroDescription: string): Promise<string> => {
   const ai = getAiClient();
   
-  // UNIFIED STYLE PROMPT
-  // This ensures all heroes look like they belong in the same high-end game.
+  // UNIFIED STYLE PROMPT: "PREMIUM HIGH-TECH ARCADE"
+  // Optimized for 30+ audience: Nostalgic heroic framing but modern rendering technology.
   const stylePrompt = `
-    Portrait shot of a superhero, looking slightly off-camera.
-    Style: High-end Cinematic Digital Art, Blizzard Cinematic Style, detailed textures.
-    Atmosphere: Dark sci-fi background with neon rim lighting (cyan and purple accents).
-    Quality: 8k resolution, highly detailed armor/clothing, sharp focus on face.
-    Character details: ${heroDescription}.
+    Character Concept Art of: ${heroDescription}.
+    
+    AESTHETIC & STYLE:
+    - Premium Mobile RPG Gacha Art (Legendary Tier).
+    - High-Tech Arcade Style: A blend of detailed sci-fi realism and vibrant, punchy colors.
+    - Rendering: Octane Render / Unreal Engine 5 style. 3D shading with high contrast.
+    
+    COMPOSITION & LIGHTING:
+    - Cinematic Studio Lighting: Dramatic rim lighting (cyan, magenta, or gold) to separate character from background.
+    - Subsurface Scattering: Skin looks alive and translucent.
+    - Materials: Shiny metals, matte tactical fabrics, glowing energy elements.
+    - Background: Abstract dark hex-grid or tech-interface pattern, out of focus (bokeh), dark mood to make the character pop.
+    
+    QUALITY:
+    - 8k resolution, Masterpiece, Sharp focus, Highly detailed face and eyes.
+    - No distortion, no blur.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-2.5-flash-image', // Fast generation
       contents: stylePrompt,
     });
 
@@ -232,7 +241,7 @@ export const animateHeroPortrait = async (imageBase64: string, mimeType: string)
         }
     }
 
-    const prompt = "The character comes to life, looks directly at the camera, breathes slowly, and makes a subtle heroic gesture. Cinematic lighting, high quality, 4k, loopable motion.";
+    const prompt = "The character breathes slowly, looking confident. Subtle movement of hair or glowing energy parts. High-tech arcade style, cinematic loop.";
 
     try {
         let operation = await ai.models.generateVideos({
@@ -245,7 +254,7 @@ export const animateHeroPortrait = async (imageBase64: string, mimeType: string)
             config: {
                 numberOfVideos: 1,
                 resolution: '720p',
-                aspectRatio: '1:1' // Matches the square portrait usually
+                aspectRatio: '9:16'
             }
         });
 
@@ -275,9 +284,6 @@ export const animateHeroPortrait = async (imageBase64: string, mimeType: string)
 export const chatWithAi = async (message: string, history: {role: string, parts: any[]}[]): Promise<string> => {
     const ai = getAiClient();
     
-    // We use generateContent here to allow for thinking config on single turns or manage chat manually
-    // But for simplicity in this context, we'll use generateContent with thinking
-    
     const contents = [
         ...history,
         { role: 'user', parts: [{ text: message }] }
@@ -287,9 +293,8 @@ export const chatWithAi = async (message: string, history: {role: string, parts:
         model: 'gemini-3-pro-preview',
         contents: contents,
         config: {
-            // "You MUST add thinking mode... set thinkingBudget to 32768"
             thinkingConfig: { thinkingBudget: 32768 },
-            systemInstruction: "Du bist der allwissende Datenbank-Archivar der Infinite Arena. Du bist hilfreich, weise und hast Zugriff auf alles Wissen über Superhelden."
+            systemInstruction: "Du bist der allwissende Datenbank-Archivar. Antworte im Stil eines Sci-Fi Interface: Präzise, höflich, technisch."
         }
     });
 
@@ -305,7 +310,7 @@ export const analyzeImage = async (base64Image: string, mimeType: string): Promi
         contents: {
             parts: [
                 { inlineData: { data: base64Image, mimeType: mimeType } },
-                { text: "Analysiere dieses Bild. Ist es ein Superheld? Beschreibe die Kräfte, Schwächen und die wahrscheinliche Gesinnung basierend auf dem visuellen Erscheinungsbild." }
+                { text: "Analysiere dieses Bild für ein RPG. Welcher Klasse (Tank, DPS, Support) würde dieser Charakter angehören? Schätze die Stats." }
             ]
         }
     });
@@ -313,22 +318,25 @@ export const analyzeImage = async (base64Image: string, mimeType: string): Promi
     return response.text || "Keine Analyse möglich.";
 };
 
-// 3. Pro Image Generation (Gemini 3 Pro Image)
+// 3. Pro Image Generation (Gemini 3 Pro Image) - ART LAB
 export const generateProImage = async (prompt: string, aspectRatio: string, size: '1K'|'2K'|'4K'): Promise<string> => {
     const ai = getAiClient();
     
-    // Needs user key selection for Veo/Pro Image usually, handled by App logic via aistudio shim if needed, 
-    // but here we use the env key as per general instruction unless specific flow triggered.
-    // The instruction says "Users MUST select their own API key" for Veo/Image Pro. 
-    // Assuming App.tsx handles the UI for key selection if this throws or we check beforehand.
+    // Injecting the game style into user prompts for consistency
+    const enhancedPrompt = `
+      Create a "High-Tech Arcade" style artwork based on: ${prompt}.
+      Style: Octane Render, 3D Sci-Fi, Neon Accents, Detailed Textures.
+      Lighting: Cinematic, Volumetric.
+      Quality: 8k.
+    `;
     
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
-            contents: { parts: [{ text: prompt }] },
+            contents: { parts: [{ text: enhancedPrompt }] },
             config: {
                 imageConfig: {
-                    aspectRatio: aspectRatio as any, // "1:1", "16:9", etc.
+                    aspectRatio: aspectRatio as any, 
                     imageSize: size
                 }
             }
@@ -358,7 +366,7 @@ export const editImage = async (base64Image: string, mimeType: string, prompt: s
         contents: {
             parts: [
                 { inlineData: { data: base64Image, mimeType: mimeType } },
-                { text: prompt }
+                { text: `Edit this image maintaining the 'High-Tech Arcade' style: ${prompt}` }
             ]
         }
     });
@@ -375,34 +383,32 @@ export const editImage = async (base64Image: string, mimeType: string, prompt: s
 };
 
 // 5. Video Generation (Veo)
-// Note: This requires the aistudio key selection flow in UI
 export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:16', imageBase64?: string, mimeType?: string): Promise<string> => {
-     // Create a new client instance inside here if we needed to pass a dynamic key, 
-     // but the instructions say process.env.API_KEY is injected after selection.
      const ai = getAiClient();
+
+     // Enforce style on text-to-video
+     const styledPrompt = imageBase64 ? prompt : `${prompt}. Style: High-Tech Sci-Fi Arcade, Cinematic Lighting, 3D Render style.`;
 
      let operation;
      
      if (imageBase64 && mimeType) {
-         // Image to Video
          operation = await ai.models.generateVideos({
              model: 'veo-3.1-fast-generate-preview',
-             prompt: prompt || "Animate this image", // Prompt optional for img2vid usually, but good to have
+             prompt: styledPrompt || "Animate this character in a heroic idle pose.",
              image: {
                  imageBytes: imageBase64,
                  mimeType: mimeType
              },
              config: {
                  numberOfVideos: 1,
-                 resolution: '720p', // Fast supports 720p usually or we default
+                 resolution: '720p', 
                  aspectRatio: aspectRatio
              }
          });
      } else {
-         // Text to Video
          operation = await ai.models.generateVideos({
              model: 'veo-3.1-fast-generate-preview',
-             prompt: prompt,
+             prompt: styledPrompt,
              config: {
                  numberOfVideos: 1,
                  resolution: '720p',
@@ -411,16 +417,14 @@ export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:
          });
      }
 
-     // Poll for completion
      while (!operation.done) {
-         await new Promise(resolve => setTimeout(resolve, 5000)); // 5s poll
+         await new Promise(resolve => setTimeout(resolve, 5000));
          operation = await ai.operations.getVideosOperation({ operation: operation });
      }
 
      const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
      if (!videoUri) throw new Error("Kein Video generiert.");
 
-     // Fetch the actual bytes using the API key
      const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
      const blob = await response.blob();
      return URL.createObjectURL(blob);
@@ -433,7 +437,7 @@ function getSchema() {
     type: Type.OBJECT,
     properties: {
       name: { type: Type.STRING },
-      description: { type: Type.STRING, description: "Eine kurze Zusammenfassung des Charakters (2-3 Sätze)." },
+      description: { type: Type.STRING, description: "Eine visuell detaillierte Beschreibung des Charakters (Aussehen, Rüstung, Effekte) für die Bildgenerierung." },
       powerstats: {
         type: Type.OBJECT,
         properties: {

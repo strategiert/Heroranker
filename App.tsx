@@ -3,33 +3,23 @@ import {
   Database, Loader2, RefreshCw, AlertTriangle, Copy, 
   CheckSquare, Square, Shield, Hammer, User, LayoutDashboard, Zap, Search, ChevronRight, Brain, Activity, Dumbbell,
   Coins, Leaf, Box, Gem, ArrowUpCircle, Clock, Terminal, ChevronUp, Construction, Sparkles, MessageSquare, Image as ImageIcon, Video, Eye, Wand2,
-  Dice5, Layers, Book, Film, Cpu
+  Dice5, Layers, Book, Film, Cpu, Sword, Rocket, Trash2, Unlock, Lock, Star, TowerControl as Tower
 } from 'lucide-react';
-import { Hero, ExternalHero, ViewState } from './types';
+import { Hero, ExternalHero, ViewState, EquipmentLoadout, WikiHero } from './types';
 import { fetchRawHeroes, listTables, SCHEMA_SQL, REQUIRED_TABLE_NAME, saveHero, fetchMyHeroes } from './services/supabaseService';
 import { transformHero, generateStrategicAdvice, chatWithAi, analyzeImage, generateProImage, editImage, generateVeoVideo, animateHeroPortrait } from './services/geminiService';
 import { FULL_HERO_DATA } from './services/fullHeroData';
 import { GameProvider, useGame } from './context/GameContext';
-import { InventoryProvider } from './context/InventoryContext';
+import { InventoryProvider, useInventory, EquipmentItem, EquipmentSlot, ItemRarity } from './context/InventoryContext';
+// TowerProvider removed, handled in SpireScreen
 import { BuildingType, Resources } from './types/economy';
 import { calculateBuildingCost, calculateBuildTime, formatDuration } from './utils/formulas';
 import { StatsRadar } from './components/StatsRadar';
 import { Nanoforge } from './components/Nanoforge';
-
-// Helper Component for Stat Bars (Still used for mini-views or list items if needed)
-const StatBar = ({ label, value, color, icon: Icon }: { label: string, value: number, color: string, icon: any }) => (
-  <div className="flex items-center gap-2 text-[10px] w-full">
-    <Icon className={`w-3 h-3 ${color}`} />
-    <span className="w-6 text-slate-400 font-mono">{label}</span>
-    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-      <div 
-        className={`h-full rounded-full ${color.replace('text-', 'bg-')} shadow-[0_0_5px_currentColor]`} 
-        style={{ width: `${Math.min(value, 100)}%` }}
-      />
-    </div>
-    <span className="w-6 text-right font-mono text-slate-300 font-bold">{value}</span>
-  </div>
-);
+import { SpireScreen } from './components/SpireScreen';
+import { SaveManager } from './components/SaveManager';
+import { AuthModal } from './components/AuthModal';
+import { SpireProvider, Item } from './context/SpireContext';
 
 // --- Station Components ---
 
@@ -37,107 +27,21 @@ const ResourceDisplay = () => {
   const { state } = useGame();
   const res = state.resources;
 
-  const Item = ({ icon: Icon, val, colorClass, label }: any) => (
-    <div className="flex flex-col items-center relative group min-w-[70px]">
-       <div className={`
-         flex items-center gap-1.5 px-3 py-1.5 rounded-full border-b-2 
-         bg-slate-800 border-slate-950 shadow-lg relative overflow-hidden w-full justify-center
-       `}>
-          {/* Shine effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] animate-shine pointer-events-none"/>
-          
-          <Icon className={`w-3.5 h-3.5 ${colorClass} drop-shadow-md`} />
-          <span className="font-tech font-bold text-sm text-white tracking-wide shadow-black drop-shadow-sm">
-             {val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val}
-          </span>
-       </div>
-       <span className="text-[9px] font-bold text-slate-500 uppercase mt-1 tracking-wider">{label}</span>
+  const Item = ({ icon: Icon, val, bg, text }: any) => (
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${bg} border border-white/10 shadow-sm`}>
+       <Icon className={`w-4 h-4 ${text}`} />
+       <span className="font-bold text-sm text-slate-800">
+          {val >= 10000 ? (val / 1000).toFixed(1) + 'k' : val}
+       </span>
     </div>
   );
 
   return (
-    <div className="flex justify-between items-center px-4 py-2 bg-[#0B1120] border-b border-slate-800/50 shadow-xl z-20 sticky top-0 backdrop-blur-md bg-opacity-90">
-      <Item icon={Coins} val={res.credits} colorClass="text-yellow-400" label="Credits" />
-      <Item icon={Leaf} val={res.biomass} colorClass="text-green-400" label="Biomasse" />
-      <Item icon={Box} val={res.nanosteel} colorClass="text-blue-400" label="Nano" />
-      <Item icon={Gem} val={res.gems} colorClass="text-purple-400" label="Gems" />
-    </div>
-  );
-};
-
-const KoraWidget = () => {
-  const { state } = useGame();
-  const [advice, setAdvice] = useState<{title: string, advice: string, priority: string} | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-     handleConsult();
-  }, []); 
-
-  const handleConsult = async () => {
-    setLoading(true);
-    try {
-      const result = await generateStrategicAdvice(state);
-      setAdvice(result);
-    } catch (e) {
-      setAdvice({ title: 'ERROR', advice: 'Verbindung unterbrochen.', priority: 'low' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const isDanger = advice?.priority === 'high';
-
-  return (
-    <div className="px-4 py-4">
-      <div className={`
-        relative rounded-xl overflow-hidden border-2 transition-all duration-300 shadow-2xl
-        ${isDanger ? 'border-red-500/50 bg-red-950/20' : 'border-cyan-500/30 bg-slate-900'}
-      `}>
-         {/* CRT Effect Layers */}
-         <div className="scanlines opacity-20"></div>
-         <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-
-         <div className="p-3 flex items-start gap-3 relative z-10">
-            {/* Portrait Box */}
-            <div className={`
-              w-14 h-14 rounded-lg border-2 flex items-center justify-center shrink-0 bg-black/50 backdrop-blur
-              ${isDanger ? 'border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]'}
-            `}>
-               {loading ? (
-                 <Loader2 className={`w-8 h-8 animate-spin ${isDanger ? 'text-red-500' : 'text-cyan-400'}`} />
-               ) : (
-                 <Terminal className={`w-8 h-8 ${isDanger ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`} />
-               )}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-               <div className="flex justify-between items-center mb-1">
-                  <span className={`font-tech font-bold tracking-widest text-xs uppercase
-                    ${isDanger ? 'text-red-400' : 'text-cyan-400'}
-                  `}>
-                    // K.O.R.A. AI SYSTEM
-                  </span>
-                  {isDanger && <AlertTriangle className="w-3 h-3 text-red-500 animate-bounce" />}
-               </div>
-               <div className="min-h-[2.5rem] flex items-center">
-                  <p className={`font-mono text-sm leading-tight ${isDanger ? 'text-red-200' : 'text-cyan-100'}`}>
-                    {loading ? <span className="animate-pulse">_Analysiere Basis-Daten...</span> : `"${advice?.advice}"`}
-                  </p>
-               </div>
-            </div>
-         </div>
-
-         {/* Refresh Button */}
-         <button 
-           onClick={handleConsult} 
-           disabled={loading}
-           className="absolute bottom-2 right-2 p-1.5 rounded-full bg-black/40 hover:bg-white/10 text-white/50 hover:text-white transition-colors border border-white/10"
-         >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`}/>
-         </button>
-      </div>
+    <div className="flex overflow-x-auto gap-3 p-3 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-20 shadow-sm no-scrollbar">
+      <Item icon={Coins} val={res.credits} bg="bg-yellow-100" text="text-yellow-600" />
+      <Item icon={Leaf} val={res.biomass} bg="bg-green-100" text="text-green-600" />
+      <Item icon={Box} val={res.nanosteel} bg="bg-blue-100" text="text-blue-600" />
+      <Item icon={Gem} val={res.gems} bg="bg-purple-100" text="text-purple-600" />
     </div>
   );
 };
@@ -147,11 +51,11 @@ const BuildingGrid = () => {
 
   const getStyle = (type: BuildingType) => {
     switch (type) {
-      case BuildingType.COMMAND_CENTER: return { color: 'text-yellow-400', bg: 'from-slate-800 to-slate-900', border: 'border-yellow-500/30' };
-      case BuildingType.HYDROPONICS: return { color: 'text-green-400', bg: 'from-green-950/40 to-slate-900', border: 'border-green-500/30' };
-      case BuildingType.NANO_FOUNDRY: return { color: 'text-blue-400', bg: 'from-blue-950/40 to-slate-900', border: 'border-blue-500/30' };
-      case BuildingType.CREDIT_TERMINAL: return { color: 'text-purple-400', bg: 'from-purple-950/40 to-slate-900', border: 'border-purple-500/30' };
-      default: return { color: 'text-slate-400', bg: 'from-slate-800 to-slate-900', border: 'border-slate-700' };
+      case BuildingType.COMMAND_CENTER: return { iconBg: 'bg-yellow-500', iconColor: 'text-white' };
+      case BuildingType.HYDROPONICS: return { iconBg: 'bg-green-500', iconColor: 'text-white' };
+      case BuildingType.NANO_FOUNDRY: return { iconBg: 'bg-blue-500', iconColor: 'text-white' };
+      case BuildingType.CREDIT_TERMINAL: return { iconBg: 'bg-purple-500', iconColor: 'text-white' };
+      default: return { iconBg: 'bg-slate-500', iconColor: 'text-white' };
     }
   };
 
@@ -176,14 +80,12 @@ const BuildingGrid = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 pb-20 custom-scrollbar">
+    <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 custom-scrollbar">
        <div className="grid grid-cols-2 gap-4">
           {state.buildings.map((b) => {
              const style = getStyle(b.type);
              const Icon = getIcon(b.type);
              const isUpgrading = b.status === 'UPGRADING';
-             const nextCost = calculateBuildingCost(b.type, b.level);
-             const buildTime = calculateBuildTime(b.level);
              
              let timeLeft = 0;
              if (isUpgrading && b.finishTime) {
@@ -191,90 +93,47 @@ const BuildingGrid = () => {
              }
 
              return (
-               <div key={b.id} className={`
-                  relative rounded-2xl p-0.5 bg-gradient-to-b ${style.bg} shadow-lg group transition-transform
-                  ${isUpgrading ? 'ring-2 ring-yellow-500/50 ring-offset-2 ring-offset-black' : ''}
-               `}>
-                  <div className="h-full bg-[#131b2e] rounded-xl overflow-hidden flex flex-col border border-slate-700/50 relative">
-                     
-                     {/* Level Badge */}
-                     <div className="absolute top-0 right-0 bg-slate-950/80 backdrop-blur rounded-bl-xl px-2 py-1 border-b border-l border-slate-700/50 z-10">
-                        <div className="flex items-center gap-1">
-                           <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
-                           <span className="font-tech font-bold text-xs text-white">LV {b.level}</span>
-                        </div>
-                     </div>
-
-                     {/* Main Content */}
-                     <div className="p-3 flex-1 flex flex-col items-center justify-center pt-6">
-                        {/* Icon Circle */}
-                        <div className={`
-                           w-14 h-14 rounded-full bg-slate-900 border-2 ${style.border} 
-                           flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(0,0,0,0.5)]
-                           group-hover:scale-110 transition-transform duration-300 relative
-                        `}>
-                           {!isUpgrading && (
-                             <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center border-2 border-slate-900 animate-float shadow-lg">
-                                <ArrowUpCircle className="w-4 h-4 text-white" />
-                             </div>
-                           )}
-                           <Icon className={`w-7 h-7 ${style.color}`} />
-                        </div>
-
-                        <h4 className="font-comic text-white text-lg tracking-wide uppercase drop-shadow-md text-center leading-none mb-1">
-                          {getLabel(b.type)}
-                        </h4>
-                        
-                        <p className={`text-[10px] uppercase font-bold tracking-wider ${isUpgrading ? 'text-yellow-400' : 'text-slate-500'}`}>
-                           {isUpgrading ? 'Baustelle' : 'Produktiv'}
-                        </p>
-                     </div>
-
-                     {/* Action Footer */}
-                     <div className="p-2 bg-slate-900/50 border-t border-white/5">
-                        {isUpgrading ? (
-                           <div className="w-full">
-                              <div className="flex justify-between text-[10px] text-yellow-500 font-mono mb-1">
-                                 <span>Upgrade</span>
-                                 <span>{formatDuration(timeLeft)}</span>
-                              </div>
-                              <div className="h-2 bg-slate-800 rounded-full overflow-hidden w-full mb-2">
-                                 <div className="h-full bg-yellow-500 progress-striped w-full animate-pulse"></div>
-                              </div>
-                              <button 
-                                onClick={() => speedUpBuilding(b.id, 60)}
-                                className="game-btn w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 rounded font-bold shadow-lg"
-                              >
-                                SCHNELL (-1m)
-                              </button>
-                           </div>
-                        ) : (
-                           <button 
-                             onClick={() => startUpgrade(b.id)}
-                             className="game-btn w-full bg-green-600 hover:bg-green-500 border-green-800 text-white py-1.5 rounded-lg font-bold text-xs shadow-lg flex items-center justify-center gap-1 group/btn"
-                           >
-                              <Construction className="w-3 h-3 group-hover/btn:rotate-12 transition-transform"/>
-                              <span>UPGRADE</span>
-                           </button>
-                        )}
-                        
-                        {/* Cost Tooltip */}
-                        {!isUpgrading && (
-                           <div className="flex justify-center gap-2 mt-1.5 opacity-60">
-                              {nextCost.credits > 0 && (
-                                 <div className="flex items-center gap-0.5 text-[9px] text-white">
-                                    <Coins className="w-2.5 h-2.5 text-yellow-400"/> {nextCost.credits}
-                                 </div>
-                              )}
-                              {nextCost.nanosteel > 0 && (
-                                 <div className="flex items-center gap-0.5 text-[9px] text-white">
-                                    <Box className="w-2.5 h-2.5 text-blue-400"/> {nextCost.nanosteel}
-                                 </div>
-                              )}
-                           </div>
-                        )}
-                     </div>
+               <div key={b.id} className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 relative overflow-hidden group active:scale-[0.98] transition-transform">
+                  
+                  {/* Header Level Badge */}
+                  <div className="flex justify-between items-start mb-3">
+                      <div className={`w-12 h-12 rounded-xl ${style.iconBg} flex items-center justify-center shadow-md`}>
+                          <Icon className={`w-7 h-7 ${style.iconColor}`} />
+                      </div>
+                      <div className="bg-slate-100 text-slate-600 text-xs font-black px-2 py-1 rounded-md">
+                          LV {b.level}
+                      </div>
                   </div>
+
+                  <h4 className="font-black text-slate-800 text-lg uppercase mb-1">{getLabel(b.type)}</h4>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">
+                      {isUpgrading ? 'WIRD GEBAUT...' : 'PRODUKTIV'}
+                  </p>
+
+                  {isUpgrading ? (
+                      <div>
+                          <div className="flex justify-between text-xs font-bold text-blue-600 mb-1">
+                              <span>Fertig in:</span>
+                              <span>{formatDuration(timeLeft)}</span>
+                          </div>
+                          <div className="h-2 bg-slate-200 rounded-full overflow-hidden w-full mb-3">
+                             <div className="h-full bg-blue-500 w-full animate-pulse"></div>
+                          </div>
+                          <button 
+                             onClick={() => speedUpBuilding(b.id, 60)}
+                             className="w-full py-2 bg-blue-500 text-white rounded-xl font-black text-xs shadow-sm uppercase"
+                          >
+                             Beschleunigen
+                          </button>
+                      </div>
+                  ) : (
+                      <button 
+                         onClick={() => startUpgrade(b.id)}
+                         className="w-full py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-black text-sm shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-[4px] transition-all uppercase flex items-center justify-center gap-2"
+                      >
+                         <Construction className="w-4 h-4" /> Upgrade
+                      </button>
+                  )}
                </div>
              );
           })}
@@ -283,318 +142,177 @@ const BuildingGrid = () => {
   );
 };
 
-// --- NEW AI LAB COMPONENTS ---
-
+// ... (AiLab component unchanged) ...
 const AiLab = () => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'vision' | 'art' | 'video'>('chat');
-  
-  // Chat State
-  const [chatInput, setChatInput] = useState('');
-  const [chatHistory, setChatHistory] = useState<{role: 'user' | 'model', text: string}[]>([]);
-  const [isThinking, setIsThinking] = useState(false);
-  
-  // Vision & Art State
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [imageMime, setImageMime] = useState<string>('');
   const [prompt, setPrompt] = useState('');
-  const [outputContent, setOutputContent] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  
-  // Settings
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [imgSize, setImgSize] = useState<'1K' | '2K' | '4K'>('1K');
+  const [output, setOutput] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<'chat' | 'image'>('chat');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setSelectedImage(result);
-        setImageMime(file.type);
-        // Clean base64 for API
-        // const base64 = result.split(',')[1];
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleChat = async () => {
-    if (!chatInput.trim()) return;
-    setIsThinking(true);
-    const newHistory = [...chatHistory, {role: 'user' as const, text: chatInput}];
-    setChatHistory(newHistory);
-    setChatInput('');
-
+  const handleAction = async () => {
+    if (!prompt.trim()) return;
+    setIsLoading(true);
+    setOutput(null);
     try {
-        const formattedHist = chatHistory.map(h => ({ role: h.role, parts: [{ text: h.text }] }));
-        const response = await chatWithAi(chatInput, formattedHist);
-        setChatHistory([...newHistory, { role: 'model', text: response }]);
-    } catch (e) {
-        setChatHistory([...newHistory, { role: 'model', text: "Verbindungsfehler zur KI." }]);
+      if (mode === 'chat') {
+        const response = await chatWithAi(prompt, []);
+        setOutput(response);
+      } else {
+        const response = await generateProImage(prompt, '1:1', '1K');
+        setOutput(response);
+      }
+    } catch (error: any) {
+      setOutput(`Error: ${error.message}`);
     } finally {
-        setIsThinking(false);
+      setIsLoading(false);
     }
-  };
-
-  const handleVision = async () => {
-      if (!selectedImage) return;
-      setIsProcessing(true);
-      try {
-          const base64 = selectedImage.split(',')[1];
-          const result = await analyzeImage(base64, imageMime);
-          setOutputContent(result);
-      } catch (e) {
-          setOutputContent("Fehler bei der Analyse.");
-      } finally {
-          setIsProcessing(false);
-      }
-  };
-
-  const handleArt = async () => {
-      if (!prompt) return;
-      setIsProcessing(true);
-      setOutputContent(null);
-      try {
-          if (selectedImage) {
-              // Edit Mode (Flash Image)
-              const base64 = selectedImage.split(',')[1];
-              const result = await editImage(base64, imageMime, prompt);
-              setOutputContent(result);
-          } else {
-              // Gen Mode (Pro Image)
-              // Note: Need key selection check ideally
-              if (window.aistudio && !await window.aistudio.hasSelectedApiKey()) {
-                  await window.aistudio.openSelectKey();
-              }
-              const result = await generateProImage(prompt, aspectRatio, imgSize);
-              setOutputContent(result);
-          }
-      } catch (e: any) {
-          setOutputContent("Fehler: " + e.message);
-      } finally {
-          setIsProcessing(false);
-      }
-  };
-
-  const handleVideo = async () => {
-      setIsProcessing(true);
-      setOutputContent(null);
-      try {
-          if (window.aistudio && !await window.aistudio.hasSelectedApiKey()) {
-              await window.aistudio.openSelectKey();
-          }
-
-          let result;
-          if (selectedImage) {
-             const base64 = selectedImage.split(',')[1];
-             result = await generateVeoVideo(prompt, aspectRatio as any, base64, imageMime);
-          } else {
-             result = await generateVeoVideo(prompt, aspectRatio as any);
-          }
-          setOutputContent(result);
-      } catch (e: any) {
-          setOutputContent("Fehler: " + e.message);
-      } finally {
-          setIsProcessing(false);
-      }
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-white">
-        {/* Header */}
-        <div className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-            <h2 className="text-xl font-tech font-bold flex items-center gap-2 text-cyan-400">
-                <Sparkles className="w-5 h-5"/> AI LAB v4.0
-            </h2>
-            <div className="flex gap-2">
-                {[
-                  { id: 'chat', icon: MessageSquare },
-                  { id: 'vision', icon: Eye },
-                  { id: 'art', icon: ImageIcon },
-                  { id: 'video', icon: Video },
-                ].map((tab: any) => (
-                    <button 
-                       key={tab.id}
-                       onClick={() => { setActiveTab(tab.id as any); setOutputContent(null); setSelectedImage(null); }}
-                       className={`p-2 rounded-lg transition-colors ${activeTab === tab.id ? 'bg-cyan-900 text-cyan-200' : 'bg-slate-800 text-slate-500'}`}
-                    >
-                        <tab.icon className="w-5 h-5"/>
-                    </button>
-                ))}
+    <div className="h-full flex flex-col bg-slate-50 p-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+              <Brain className="w-5 h-5" />
             </div>
+            <h2 className="font-black text-slate-800">AI LAB</h2>
+          </div>
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+             <button onClick={() => setMode('chat')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'chat' ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500'}`}>CHAT</button>
+             <button onClick={() => setMode('image')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${mode === 'image' ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500'}`}>VISION</button>
+          </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-            
-            {/* CHAT TAB */}
-            {activeTab === 'chat' && (
-                <div className="h-full flex flex-col">
-                    <div className="flex-1 space-y-4 mb-4 overflow-y-auto">
-                        {chatHistory.length === 0 && (
-                            <div className="text-center text-slate-500 mt-10">
-                                <Brain className="w-12 h-12 mx-auto mb-2 opacity-50"/>
-                                <p>Frag den Archivar alles über Helden...</p>
-                                <p className="text-xs text-slate-600 mt-2">Powered by Gemini 3 Pro Thinking</p>
-                            </div>
-                        )}
-                        {chatHistory.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] rounded-2xl p-3 text-sm ${
-                                    msg.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none'
-                                }`}>
-                                    {msg.text}
-                                </div>
-                            </div>
-                        ))}
-                        {isThinking && (
-                            <div className="flex justify-start">
-                                <div className="bg-slate-800 rounded-2xl rounded-tl-none p-3 flex gap-2 items-center text-xs text-cyan-400">
-                                    <Loader2 className="w-3 h-3 animate-spin"/>
-                                    <span>Thinking Process (32k Tokens)...</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex gap-2">
-                        <input 
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleChat()}
-                            placeholder="Nachricht eingeben..."
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:border-cyan-500"
-                        />
-                        <button onClick={handleChat} disabled={isThinking} className="bg-cyan-600 p-2 rounded-xl text-white">
-                            <ChevronRight className="w-6 h-6"/>
-                        </button>
-                    </div>
+        <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
+           {isLoading ? (
+             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+               <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+               <span className="text-xs font-bold uppercase tracking-wider">Processing Neural Net...</span>
+             </div>
+           ) : output ? (
+             mode === 'image' ? (
+                <div className="flex justify-center">
+                  <img src={output} alt="Generated" className="rounded-xl shadow-lg max-h-[60vh] object-contain" />
                 </div>
-            )}
-
-            {/* VISION / ART / VIDEO TABS */}
-            {activeTab !== 'chat' && (
-                <div className="space-y-6">
-                    {/* File Upload Area */}
-                    <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-slate-700 rounded-2xl p-6 text-center cursor-pointer hover:bg-slate-900 hover:border-cyan-500 transition-colors relative overflow-hidden group"
-                    >
-                        {selectedImage ? (
-                            <img src={selectedImage} alt="Upload" className="max-h-64 mx-auto rounded-lg shadow-lg"/>
-                        ) : (
-                            <div className="py-8">
-                                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                                    {activeTab === 'vision' ? <Eye className="w-8 h-8 text-slate-400"/> : <ImageIcon className="w-8 h-8 text-slate-400"/>}
-                                </div>
-                                <p className="text-slate-400 font-bold">
-                                    {activeTab === 'vision' ? 'Bild analysieren' : 'Referenzbild hochladen (Optional)'}
-                                </p>
-                                <p className="text-xs text-slate-600 mt-1">Tap to select</p>
-                            </div>
-                        )}
-                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" className="hidden"/>
-                        {selectedImage && (
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setSelectedImage(null); }}
-                                className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white hover:bg-red-500"
-                            >
-                                <div className="w-4 h-4 flex items-center justify-center">x</div>
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Controls */}
-                    {activeTab !== 'vision' && (
-                        <div className="space-y-4">
-                            <textarea 
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                placeholder={activeTab === 'art' ? "Beschreibe das Bild oder 'Füge einen Retro Filter hinzu'..." : "Beschreibe das Video..."}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 focus:outline-none focus:border-cyan-500 min-h-[80px]"
-                            />
-                            
-                            <div className="flex gap-2 overflow-x-auto pb-2">
-                                {['1:1', '16:9', '9:16', '4:3', '3:4'].map(r => (
-                                    <button 
-                                        key={r}
-                                        onClick={() => setAspectRatio(r)}
-                                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border ${aspectRatio === r ? 'bg-cyan-900 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
-                                {activeTab === 'art' && !selectedImage && ['1K', '2K', '4K'].map(s => (
-                                    <button 
-                                        key={s}
-                                        onClick={() => setImgSize(s as any)}
-                                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border ${imgSize === s ? 'bg-purple-900 border-purple-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400'}`}
-                                    >
-                                        {s}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Action Button */}
-                    <button 
-                        onClick={activeTab === 'vision' ? handleVision : activeTab === 'art' ? handleArt : handleVideo}
-                        disabled={isProcessing || (activeTab === 'vision' && !selectedImage) || (activeTab !== 'vision' && !prompt)}
-                        className={`
-                            w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg transition-all
-                            ${isProcessing ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-[1.02]'}
-                        `}
-                    >
-                        {isProcessing ? (
-                            <><Loader2 className="w-6 h-6 animate-spin"/> Verarbeitung...</>
-                        ) : (
-                            <>
-                                {activeTab === 'vision' && <Eye className="w-6 h-6"/>}
-                                {activeTab === 'art' && <Wand2 className="w-6 h-6"/>}
-                                {activeTab === 'video' && <Video className="w-6 h-6"/>}
-                                <span>
-                                    {activeTab === 'vision' ? 'ANALYSIEREN' : 
-                                     activeTab === 'art' ? (selectedImage ? 'BEARBEITEN' : 'GENERIEREN') : 
-                                     'VIDEO ERSTELLEN'}
-                                </span>
-                            </>
-                        )}
-                    </button>
-
-                    {/* Output */}
-                    {outputContent && (
-                        <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 animate-in fade-in slide-in-from-bottom-4">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Resultat</h3>
-                            {activeTab === 'vision' ? (
-                                <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{outputContent}</p>
-                            ) : activeTab === 'video' ? (
-                                <video src={outputContent} controls loop className="w-full rounded-lg shadow-lg" autoPlay muted />
-                            ) : (
-                                <img src={outputContent} alt="Result" className="w-full rounded-lg shadow-lg"/>
-                            )}
-                        </div>
-                    )}
+             ) : (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                  {output}
                 </div>
-            )}
+             )
+           ) : (
+             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2">
+               <Sparkles className="w-12 h-12 opacity-50" />
+               <span className="font-bold text-sm">Awaiting Input Protocol</span>
+             </div>
+           )}
         </div>
+
+        <div className="p-4 bg-white border-t border-slate-100">
+           <div className="flex gap-2">
+             <input 
+                type="text" 
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAction()}
+                placeholder={mode === 'chat' ? "Enter query..." : "Describe visual subject..."}
+                className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+             />
+             <button 
+               onClick={handleAction}
+               disabled={isLoading || !prompt.trim()}
+               className="w-12 h-12 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center shadow-lg shadow-purple-200 transition-all active:scale-95"
+             >
+               <Zap className="w-5 h-5 fill-current" />
+             </button>
+           </div>
+        </div>
+      </div>
     </div>
   );
 };
 
+// --- DATABASE SETUP MODAL ---
+const DbSetupModal = ({ onClose }: { onClose: () => void }) => {
+    const [copied, setCopied] = useState(false);
+    const userId = localStorage.getItem('infinite_arena_user_id') || 'Wird geladen...';
 
-// --- Main Content Wrapper ---
+    const handleCopy = () => {
+        navigator.clipboard.writeText(SCHEMA_SQL);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
+                    <div className="flex items-center gap-2 text-red-400">
+                        <Terminal className="w-5 h-5" />
+                        <h2 className="font-bold font-mono">SYSTEM INITIALIZATION REQUIRED</h2>
+                    </div>
+                    <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
+                    <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                        <span className="text-slate-400 text-xs font-bold uppercase">Deine User ID:</span>
+                        <code className="text-blue-400 text-xs font-mono bg-slate-900 px-2 py-1 rounded">{userId}</code>
+                    </div>
+
+                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-200 text-sm leading-relaxed">
+                        <strong>Datenbank-Status:</strong> Tabellen fehlen oder sind veraltet. Automatische Speicherung ist pausiert.
+                    </div>
+
+                    <div className="space-y-2">
+                        <h3 className="text-slate-300 font-bold text-sm uppercase tracking-wide">Anleitung:</h3>
+                        <ol className="list-decimal list-inside text-slate-400 text-sm space-y-1 ml-2">
+                            <li>Kopiere den SQL-Code unten.</li>
+                            <li>Öffne dein Supabase Dashboard.</li>
+                            <li>Gehe zum <strong>SQL Editor</strong>.</li>
+                            <li>Füge den Code ein und klicke auf <strong>RUN</strong>.</li>
+                        </ol>
+                    </div>
+
+                    <div className="relative group">
+                        <div className="absolute top-2 right-2">
+                            <button 
+                                onClick={handleCopy}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                            >
+                                {copied ? <CheckSquare className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                {copied ? 'KOPIERT' : 'COPY SQL'}
+                            </button>
+                        </div>
+                        <pre className="bg-black rounded-xl p-4 text-xs font-mono text-green-400 overflow-x-auto border border-slate-800 shadow-inner">
+                            {SCHEMA_SQL}
+                        </pre>
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-slate-950 rounded-b-2xl flex justify-end">
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold uppercase tracking-wide shadow-lg active:scale-95 transition-all"
+                    >
+                        System Neustarten
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const AppContent = () => {
-  const [view, setView] = useState<ViewState | 'nanoforge'>('station');
-  const [selectedHero, setSelectedHero] = useState<any | null>(null);
+  const [view, setView] = useState<ViewState>('station');
+  const [selectedHero, setSelectedHero] = useState<Hero | WikiHero | null>(null);
   
-  // Forge State (Supabase Data)
+  // Forge State
   const [importedHeroes, setImportedHeroes] = useState<ExternalHero[]>([]);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
   const [dbError, setDbError] = useState(false);
+  const [showDbSetup, setShowDbSetup] = useState(false); 
+  const [showAuth, setShowAuth] = useState(false); // NEW AUTH STATE
   const [searchTerm, setSearchTerm] = useState('');
   
   // Selection & Processing
@@ -604,16 +322,15 @@ const AppContent = () => {
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
   const [generationStep, setGenerationStep] = useState('');
   
-  // My Heroes (Transformed IP)
+  // My Heroes & Inventory
   const [myHeroes, setMyHeroes] = useState<Hero[]>([]);
+  const { inventory, equipItem, unequipItem } = useInventory();
   
   // Animation State
   const [isAnimatingHero, setIsAnimatingHero] = useState(false);
 
   // Initial Load
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     setIsLoadingDb(true);
@@ -621,56 +338,45 @@ const AppContent = () => {
     setImportedHeroes([]); 
     try {
       await listTables(); 
-      // Parallel loading of both raw data and player data
-      const [rawHeroes, playerHeroes] = await Promise.all([
-          fetchRawHeroes(500),
-          fetchMyHeroes()
-      ]);
-      
+      // Fetch concurrently, but handle specific errors for my_heroes separately
+      const rawHeroes = await fetchRawHeroes(500);
       setImportedHeroes(rawHeroes);
-      setMyHeroes(playerHeroes);
+      
+      try {
+          const playerHeroes = await fetchMyHeroes();
+          setMyHeroes(playerHeroes);
+      } catch (e: any) {
+          // If my_heroes fetch fails specifically (likely table missing), trigger DB Error mode
+          if (e.message === 'TABLE_MISSING' || e.message.includes('relation "my_heroes" does not exist')) {
+              console.error("Critical: Heroes table missing");
+              setDbError(true);
+          }
+      }
     } catch (e: any) {
-      console.error("Datenbank Fehler:", e.message || JSON.stringify(e));
+      console.error("Datenbank Fehler:", e.message);
+      // General DB error
       setDbError(true);
-    } finally {
-      setIsLoadingDb(false);
-    }
+    } finally { setIsLoadingDb(false); }
   };
 
+  // ... (Other handlers kept same as existing) ...
   const toggleImportSelection = (idx: number) => {
     const newSet = new Set(selectedImportIds);
-    if (newSet.has(idx)) newSet.delete(idx);
-    else newSet.add(idx);
+    if (newSet.has(idx)) newSet.delete(idx); else newSet.add(idx);
     setSelectedImportIds(newSet);
   };
 
-  // --- NEW BATCH SELECTION FUNCTIONS ---
   const handleSelectRandom = (count: number) => {
-    // Only select from visible (filtered) and unprocessed items
-    const available = importedHeroes
-        .map((_, idx) => idx)
-        .filter(idx => !processedIndices.has(idx) && 
-            (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-             (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
-    
-    // Shuffle
+    const available = importedHeroes.map((_, idx) => idx).filter(idx => !processedIndices.has(idx) && (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
     const shuffled = [...available].sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, count);
-    
-    // Add to current selection
     const newSet = new Set(selectedImportIds);
     selected.forEach(id => newSet.add(id));
     setSelectedImportIds(newSet);
   };
 
   const handleSelectAll = () => {
-     // Select all visible unprocessed
-     const available = importedHeroes
-        .map((_, idx) => idx)
-        .filter(idx => !processedIndices.has(idx) && 
-            (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-             (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
-     
+     const available = importedHeroes.map((_, idx) => idx).filter(idx => !processedIndices.has(idx) && (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
      const newSet = new Set(selectedImportIds);
      available.forEach(id => newSet.add(id));
      setSelectedImportIds(newSet);
@@ -678,41 +384,27 @@ const AppContent = () => {
 
   const handleBatchTransform = async () => {
     if (selectedImportIds.size === 0) return;
-    
     setIsGenerating(true);
-    setGenerationStep('Initialisiere Anti-Copyright-Schmiede...');
+    setGenerationStep('Verarbeite...');
     let current = 0;
     const total = selectedImportIds.size;
     setBatchProgress({ current, total });
-    
     const indices = Array.from(selectedImportIds);
     
     for (const idx of indices) {
       const sourceHero = importedHeroes[idx];
-      setGenerationStep(`Reforging: ${sourceHero.name}...`);
-      
+      setGenerationStep(`${sourceHero.name}...`);
       try {
         const newHero = await transformHero(sourceHero);
-        
-        // Save to DB immediately
-        setGenerationStep(`Speichere: ${newHero.name}...`);
+        setGenerationStep(`Speichere...`);
         await saveHero(newHero);
-
         setMyHeroes(prev => [newHero, ...prev]); 
         setProcessedIndices(prev => new Set(prev).add(idx));
-        setSelectedImportIds(prev => {
-            const next = new Set(prev);
-            next.delete(idx);
-            return next;
-        });
-      } catch (e: any) {
-        console.error(`Error transforming ${sourceHero.name}:`, e.message || JSON.stringify(e));
-      }
-      
+        setSelectedImportIds(prev => { const next = new Set(prev); next.delete(idx); return next; });
+      } catch (e: any) { console.error(`Error transforming ${sourceHero.name}:`, e); }
       current++;
       setBatchProgress({ current, total });
     }
-    
     setIsGenerating(false);
     setBatchProgress(null);
     setGenerationStep('');
@@ -725,39 +417,19 @@ const AppContent = () => {
       try {
           const base64Data = hero.image.url.split(',')[1];
           const mimeType = hero.image.url.split(';')[0].split(':')[1];
-          
           const videoUrl = await animateHeroPortrait(base64Data, mimeType);
-          
-          const updatedHero = {
-              ...hero,
-              video: { url: videoUrl }
-          };
-          
-          // Save locally
+          const updatedHero = { ...hero, video: { url: videoUrl } };
           setMyHeroes(prev => prev.map(h => h.id === hero.id ? updatedHero : h));
           setSelectedHero(updatedHero);
-          
-          // Save to DB
           await saveHero(updatedHero);
-          
-      } catch (e: any) {
-          console.error("Animation failed", e);
-          alert("Animation fehlgeschlagen: " + e.message);
-      } finally {
-          setIsAnimatingHero(false);
-      }
+      } catch (e: any) { alert("Animation fehlgeschlagen: " + e.message); } finally { setIsAnimatingHero(false); }
   };
 
-  // Filter Logic
-  const filteredHeroes = importedHeroes.filter(h => 
-    h.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (h.publisher && h.publisher.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredHeroes = importedHeroes.filter(h => h.name.toLowerCase().includes(searchTerm.toLowerCase()) || (h.publisher && h.publisher.toLowerCase().includes(searchTerm.toLowerCase())));
 
   const renderStation = () => (
-    <div className="h-full flex flex-col bg-[#020617] overflow-hidden">
+    <div className="h-full flex flex-col bg-[#f0f4f8] overflow-hidden">
       <ResourceDisplay />
-      <KoraWidget />
       <div className="flex-1 overflow-hidden relative">
         <BuildingGrid />
       </div>
@@ -767,357 +439,155 @@ const AppContent = () => {
   const renderForge = () => {
     if (isGenerating) {
       return (
-        <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 bg-[#0B1120]">
-          <Loader2 className="w-16 h-16 text-purple-500 animate-spin" />
-          <h2 className="text-2xl font-bold font-comic text-white animate-pulse">
-             {generationStep}
-          </h2>
+        <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 bg-white">
+          <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
+          <h2 className="text-2xl font-black text-slate-800">{generationStep}</h2>
           {batchProgress && (
              <div className="w-full max-w-md space-y-2">
-                <div className="flex justify-between text-xs text-slate-400 font-mono">
-                   <span>FORGING HEROES</span>
-                   <span>{batchProgress.current} / {batchProgress.total}</span>
-                </div>
-                <div className="h-4 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-                   <div 
-                     className="h-full bg-purple-600 transition-all duration-300 relative overflow-hidden"
-                     style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
-                   >
-                      <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                   </div>
-                </div>
+                <div className="flex justify-between text-xs text-slate-400 font-bold uppercase"><span>Verarbeitung</span><span>{batchProgress.current} / {batchProgress.total}</span></div>
+                <div className="h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200"><div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}></div></div>
              </div>
           )}
         </div>
       );
     }
-
     return (
-      <div className="h-full flex flex-col bg-[#0B1120]">
-        {/* Header / Search */}
-        <div className="p-4 bg-slate-900 border-b border-slate-800 space-y-4 shadow-xl z-10">
+      <div className="h-full flex flex-col bg-[#f0f4f8]">
+        <div className="p-4 bg-white border-b border-slate-200 space-y-4 shadow-sm z-10">
             <div className="flex justify-between items-center">
-               <h2 className="text-xl font-comic text-white flex items-center gap-2">
-                  <Hammer className="w-6 h-6 text-orange-500" />
-                  HERO FORGE <span className="text-slate-600 text-sm">v2.1</span>
-               </h2>
-               {/* Connection Status */}
+               <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><Hammer className="w-6 h-6 text-orange-500" /> REKRUTIERUNG</h2>
                <div className="flex items-center gap-2 text-[10px]">
-                  <div className={`w-2 h-2 rounded-full ${isLoadingDb ? 'bg-yellow-500 animate-pulse' : dbError ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                  <span className="text-slate-500 uppercase font-bold">
-                     {isLoadingDb ? 'SYNCING...' : dbError ? 'OFFLINE' : 'CONNECTED'}
-                  </span>
+                   <div className={`w-2 h-2 rounded-full ${isLoadingDb ? 'bg-yellow-500 animate-pulse' : dbError ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                   <span className="text-slate-400 uppercase font-bold">{isLoadingDb ? 'LADEN...' : dbError ? 'FEHLER' : 'ONLINE'}</span>
+                   {dbError && (
+                       <button 
+                         onClick={() => setShowDbSetup(true)}
+                         className="ml-2 bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 hover:bg-red-200 transition-colors animate-pulse"
+                       >
+                           REPARIEREN
+                       </button>
+                   )}
                </div>
             </div>
-
-            <div className="flex gap-2">
-               <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Suche in Datenbank..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-orange-500 transition-colors text-white placeholder-slate-600"
-                  />
-               </div>
-               <button onClick={loadData} className="p-2 bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 border border-slate-700">
-                  <RefreshCw className={`w-5 h-5 ${isLoadingDb ? 'animate-spin' : ''}`} />
-               </button>
-            </div>
-            
-            {/* Action Bar */}
-            <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
-               <button onClick={() => handleSelectRandom(5)} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-300 whitespace-nowrap flex items-center gap-1 border border-slate-700">
-                  <Dice5 className="w-3 h-3 text-purple-400" /> Random 5
-               </button>
-               <button onClick={handleSelectAll} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-300 whitespace-nowrap flex items-center gap-1 border border-slate-700">
-                  <Layers className="w-3 h-3 text-blue-400" /> All Visible
-               </button>
+            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Datenbank durchsuchen..." className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 placeholder-slate-400 font-medium"/></div></div>
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+               <button onClick={() => handleSelectRandom(5)} className="px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 active:scale-95"><Dice5 className="w-3 h-3" /> Zufall (5)</button>
+               <button onClick={handleSelectAll} className="px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 active:scale-95"><Layers className="w-3 h-3" /> Alle</button>
                <div className="flex-1" />
-               {selectedImportIds.size > 0 && (
-                  <button 
-                    onClick={handleBatchTransform}
-                    className="px-4 py-1.5 bg-gradient-to-r from-orange-600 to-red-600 hover:scale-105 transition-transform rounded-lg text-xs font-bold text-white shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-right-4"
-                  >
-                     <Hammer className="w-3 h-3" />
-                     TRANSFORM ({selectedImportIds.size})
-                  </button>
-               )}
+               {selectedImportIds.size > 0 && <button onClick={handleBatchTransform} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-bold text-white shadow-md flex items-center gap-2 animate-in fade-in slide-in-from-right-4 game-btn border-blue-800"><Hammer className="w-3 h-3" /> START ({selectedImportIds.size})</button>}
             </div>
         </div>
-
-        {/* Grid */}
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-           {filteredHeroes.length === 0 ? (
-              <div className="text-center text-slate-500 mt-20">
-                 <Database className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                 <p>Keine Einträge gefunden.</p>
-                 {dbError && <p className="text-xs text-red-500 mt-2">Verbindung zur Datenbank fehlgeschlagen.</p>}
-              </div>
-           ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-20">
-                 {filteredHeroes.map((h, idx) => {
-                    const originalIndex = importedHeroes.indexOf(h);
-                    if (originalIndex === -1) return null;
-                    const isSelected = selectedImportIds.has(originalIndex);
-                    const isProcessed = processedIndices.has(originalIndex);
-
-                    if (isProcessed) return null;
-
-                    return (
-                      <div 
-                        key={originalIndex}
-                        onClick={() => toggleImportSelection(originalIndex)}
-                        className={`
-                          relative p-3 rounded-xl border-2 cursor-pointer transition-all group
-                          ${isSelected 
-                             ? 'bg-orange-950/30 border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]' 
-                             : 'bg-slate-900 border-slate-800 hover:border-slate-600'}
-                        `}
-                      >
-                         <div className="flex justify-between items-start">
-                            <div>
-                               <h3 className={`font-bold text-sm ${isSelected ? 'text-orange-200' : 'text-slate-300'}`}>{h.name}</h3>
-                               <p className="text-[10px] text-slate-500 uppercase">{h.publisher} • {h.race}</p>
-                            </div>
-                            <div className={`
-                               w-5 h-5 rounded flex items-center justify-center border transition-colors
-                               ${isSelected ? 'bg-orange-500 border-orange-500 text-white' : 'bg-slate-950 border-slate-700 text-transparent'}
-                            `}>
-                               <CheckSquare className="w-3.5 h-3.5" />
-                            </div>
-                         </div>
-                         
-                         {/* Mini Stats */}
-                         <div className="mt-3 grid grid-cols-3 gap-1 opacity-70">
-                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden" title={`INT: ${h.intelligence}`}>
-                               <div className="h-full bg-blue-500" style={{ width: `${h.intelligence}%` }}></div>
-                            </div>
-                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden" title={`STR: ${h.strength}`}>
-                               <div className="h-full bg-red-500" style={{ width: `${h.strength}%` }}></div>
-                            </div>
-                            <div className="h-1 bg-slate-800 rounded-full overflow-hidden" title={`SPD: ${h.speed}`}>
-                               <div className="h-full bg-yellow-500" style={{ width: `${h.speed}%` }}></div>
-                            </div>
-                         </div>
-                      </div>
-                    );
-                 })}
-              </div>
-           )}
+           {filteredHeroes.length === 0 ? <div className="text-center text-slate-400 mt-20"><Database className="w-12 h-12 mx-auto mb-2 opacity-20" /><p className="font-bold">Keine Daten.</p></div> : <div className="grid grid-cols-1 gap-3 pb-24">{filteredHeroes.map((h, idx) => { const originalIndex = importedHeroes.indexOf(h); if (originalIndex === -1 || processedIndices.has(originalIndex)) return null; const isSelected = selectedImportIds.has(originalIndex); return (<div key={originalIndex} onClick={() => toggleImportSelection(originalIndex)} className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.99] ${isSelected ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-100 shadow-sm'}`}><div className="flex justify-between items-start"><div><h3 className={`font-black text-sm uppercase ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{h.name}</h3><p className="text-[10px] text-slate-400 uppercase font-bold mt-1">{h.publisher} • {h.race}</p></div><div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-slate-200 text-transparent'}`}><CheckSquare className="w-4 h-4" /></div></div></div>); })}</div>}
         </div>
       </div>
     );
   };
 
+  // ... (renderHeroOverlay, renderDetail helpers omitted for brevity) ...
   const renderHeroOverlay = () => {
       if (!selectedHero) return null;
 
-      const isMyHero = selectedHero.powerstats !== undefined;
-      const hasVideo = isMyHero && selectedHero.video?.url;
-      
+      const isMyHero = 'powerstats' in selectedHero;
+      const hasVideo = isMyHero && 'video' in selectedHero && (selectedHero as Hero).video?.url;
       const name = selectedHero.name;
-      const universe = isMyHero ? 'INFINITE' : selectedHero.universe;
+      const universe = isMyHero ? 'INFINITE' : (selectedHero as WikiHero).universe;
       
-      // Determine Image/Video Display
-      let visualContent;
-      
-      if (hasVideo) {
-          visualContent = (
-             <video 
-                src={selectedHero.video.url} 
-                className="w-full h-full object-cover" 
-                autoPlay loop muted playsInline 
-             />
-          );
-      } else if (isMyHero && selectedHero.image?.url) {
-          visualContent = <img src={selectedHero.image.url} className="w-full h-full object-cover" />;
-      } else {
-          visualContent = <div className="text-9xl animate-float drop-shadow-[0_0_30px_rgba(168,85,247,0.4)]">{selectedHero.image}</div>;
-      }
-
-      const description = selectedHero.description;
-      const reason = isMyHero ? selectedHero.biography.alignment : selectedHero.reason;
-      const stats = isMyHero ? selectedHero.powerstats : selectedHero.stats;
-      
-      const abilities = isMyHero 
-        ? [selectedHero.appearance.race, selectedHero.work.occupation, selectedHero.biography.alignment] 
-        : selectedHero.abilities;
-
       return (
-        <div className="fixed inset-0 z-50 bg-[#0B1120] flex flex-col animate-in slide-in-from-bottom-10">
-            {/* Header Image Area */}
-            <div className="h-80 relative bg-gradient-to-b from-purple-900/20 to-[#0B1120] flex items-center justify-center shrink-0 overflow-hidden group">
-                {visualContent}
+        <div className="fixed inset-0 z-50 bg-[#0f172a] flex flex-col animate-in slide-in-from-bottom-10">
+            {/* Full Screen Portrait View */}
+            <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+                {hasVideo ? (
+                    <video src={(selectedHero as Hero).video!.url} className="w-full h-full object-cover" autoPlay loop muted playsInline />
+                ) : isMyHero && (selectedHero as Hero).image?.url ? (
+                    <img src={(selectedHero as Hero).image.url} className="w-full h-full object-cover" />
+                ) : typeof selectedHero.image === 'string' ? (
+                    <div className="text-9xl animate-float">{selectedHero.image}</div>
+                ) : null}
                 
-                {/* Generate Video Button (If My Hero, no video yet, and not currently generating) */}
-                {isMyHero && !hasVideo && !isAnimatingHero && (
-                   <button 
-                     onClick={() => handleAnimateHero(selectedHero)}
-                     className="absolute center top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 backdrop-blur border border-white/20 text-white px-4 py-2 rounded-full flex items-center gap-2 transition-all opacity-0 group-hover:opacity-100 scale-95 hover:scale-100 z-20"
-                   >
-                       <Film className="w-5 h-5 text-cyan-400" />
-                       <span className="font-bold text-sm">Motion Portrait erstellen</span>
-                   </button>
-                )}
+                {/* Gradient Overlay for Text */}
+                <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none"></div>
 
-                {isAnimatingHero && (
-                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
-                       <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mb-2" />
-                       <span className="text-white font-tech tracking-wider text-sm animate-pulse">GENERATING MOTION...</span>
-                   </div>
-                )}
-                
-                <button 
-                    onClick={() => setSelectedHero(null)}
-                    className="absolute top-4 left-4 w-10 h-10 bg-black/30 backdrop-blur rounded-full flex items-center justify-center border border-white/10 text-white z-10 active:scale-95"
-                >
-                    <ChevronUp className="w-6 h-6 rotate-[-90deg]" />
+                {/* Hero Info Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 p-8 pb-12">
+                     <div className="flex items-center gap-2 mb-2">
+                        <span className="bg-yellow-500 text-black font-black text-xs px-2 py-0.5 rounded uppercase">legendary</span>
+                        <span className="bg-white/20 backdrop-blur text-white font-bold text-xs px-2 py-0.5 rounded uppercase border border-white/20">{universe}</span>
+                     </div>
+                     <h2 className="text-5xl font-black text-white uppercase italic tracking-tighter mb-2 drop-shadow-lg">{name}</h2>
+                     <p className="text-slate-300 text-sm line-clamp-3 mb-6 font-medium leading-relaxed max-w-md">{selectedHero.description}</p>
+                     
+                     <div className="flex gap-4">
+                         {isMyHero && !hasVideo && (
+                            <button onClick={() => handleAnimateHero(selectedHero as Hero)} className="flex-1 bg-white text-black font-black py-3 rounded-xl uppercase tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                                {isAnimatingHero ? <Loader2 className="w-5 h-5 animate-spin"/> : <Video className="w-5 h-5" />}
+                                <span>Motion</span>
+                            </button>
+                         )}
+                         <button onClick={() => setSelectedHero(null)} className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center text-white border border-white/20 active:scale-95">
+                             <ChevronUp className="w-6 h-6 rotate-180" />
+                         </button>
+                     </div>
+                </div>
+
+                {/* Close Button Top Left */}
+                <button onClick={() => setSelectedHero(null)} className="absolute top-safe-top left-4 w-10 h-10 bg-black/20 backdrop-blur rounded-full flex items-center justify-center text-white z-20">
+                    <ChevronUp className="w-6 h-6 -rotate-90" />
                 </button>
-                <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0B1120] via-[#0B1120]/80 to-transparent pointer-events-none">
-                    <h2 className="text-4xl font-comic text-white drop-shadow-md">{name}</h2>
-                    <p className="text-purple-400 font-bold uppercase tracking-wider text-sm">{universe} Universe</p>
-                </div>
-            </div>
-
-            {/* Tabs & Content */}
-            <div className="flex-1 bg-[#0B1120] px-6 overflow-y-auto">
-                <div className="space-y-6 pb-20">
-                    {/* Description Box */}
-                    <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 text-sm leading-relaxed text-slate-300">
-                        {description}
-                        <div className="mt-2 text-xs text-slate-500 italic border-t border-slate-800 pt-2">
-                            "{reason}"
-                        </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div>
-                        <h3 className="font-bold text-slate-500 uppercase text-xs mb-3 flex items-center gap-2">
-                            <Activity className="w-4 h-4"/> Kampfdaten
-                        </h3>
-                        <div className="bg-slate-900 rounded-xl p-2 border border-slate-800 h-64">
-                            <StatsRadar stats={stats} />
-                        </div>
-                    </div>
-
-                    {/* Abilities / Tags */}
-                    <div>
-                        <h3 className="font-bold text-slate-500 uppercase text-xs mb-3 flex items-center gap-2">
-                            <Zap className="w-4 h-4"/> Merkmale
-                        </h3>
-                        <div className="flex flex-wrap gap-2">
-                            {abilities.map((ability: string, idx: number) => (
-                                <span key={idx} className="bg-purple-900/20 border border-purple-500/30 text-purple-300 px-3 py-1 rounded-lg text-xs font-bold">
-                                    {ability}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
       );
   };
 
-  const renderWiki = () => {
-    return (
-        <div className="h-full flex flex-col bg-[#0B1120] p-4 text-white">
-            {/* List View */}
-            <div className="mb-4">
-                <h2 className="text-2xl font-comic text-white flex items-center gap-2 tracking-wide">
-                <Book className="w-6 h-6 text-purple-500" />
-                MULTIVERSE WIKI
-                </h2>
-                <p className="text-xs text-slate-500">Datenbank bekannter Entitäten ({FULL_HERO_DATA.length})</p>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-3 overflow-y-auto pb-20 custom-scrollbar">
-                {FULL_HERO_DATA.map(hero => (
-                <button 
-                    key={hero.id}
-                    onClick={() => setSelectedHero(hero)}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-purple-500/50 transition-all text-left group"
-                >
-                    <div className="w-14 h-14 rounded-lg bg-slate-950 flex items-center justify-center text-3xl shadow-inner border border-slate-800 group-hover:scale-105 transition-transform">
-                        {hero.image}
-                    </div>
-                    <div className="flex-1">
-                        <h3 className="font-bold text-slate-200 group-hover:text-purple-400 transition-colors">{hero.name}</h3>
-                        <div className="flex gap-2 text-[10px] uppercase font-bold tracking-wider mt-1">
-                            <span className="text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">{hero.universe}</span>
-                            <span className={`px-1.5 py-0.5 rounded ${
-                                hero.tier === 'S' || hero.tier === 'Cosmic' ? 'text-yellow-500 bg-yellow-950/30' : 'text-slate-400 bg-slate-800'
-                            }`}>{hero.tier}-Tier</span>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-2xl font-comic text-slate-700 group-hover:text-white transition-colors">{hero.power}</div>
-                        <div className="text-[9px] text-slate-600 uppercase font-mono">PWR</div>
-                    </div>
-                </button>
-                ))}
-            </div>
-        </div>
-    );
-  }
-
   const renderDetail = () => (
-     <div className="p-4 h-full flex flex-col bg-[#0B1120] text-slate-200">
-        <h2 className="text-2xl font-comic text-white mb-6 flex items-center gap-2 px-2 tracking-wide">
-           <User className="w-6 h-6 text-blue-500" />
-           KASERNE <span className="text-slate-600 text-lg">({myHeroes.length})</span>
-        </h2>
+     <div className="h-full flex flex-col bg-[#f0f4f8]">
+        <div className="p-4 bg-white border-b border-slate-200 shadow-sm z-10 sticky top-0">
+            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+               <User className="w-6 h-6 text-blue-500" />
+               Kaserne <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded-full font-bold">{myHeroes.length}</span>
+            </h2>
+        </div>
 
         {myHeroes.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50">
-               <div className="w-24 h-24 rounded-full bg-slate-900 border-4 border-slate-800 flex items-center justify-center mb-4">
-                  <User className="w-10 h-10 text-slate-700"/>
+            <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 p-8">
+               <div className="w-24 h-24 rounded-full bg-slate-200 flex items-center justify-center mb-4">
+                  <User className="w-10 h-10 text-slate-400"/>
                </div>
-               <h3 className="text-xl font-bold text-white mb-2">Keine Helden Rekrutiert</h3>
-               <button onClick={() => setView('forge')} className="game-btn bg-orange-600 text-white px-6 py-2 rounded-full font-bold text-sm mt-4">
-                  ZUR SCHMIEDE
+               <h3 className="text-xl font-black text-slate-700 mb-2">Keine Truppen</h3>
+               <button onClick={() => setView('forge')} className="px-6 py-3 bg-blue-500 text-white rounded-xl font-bold uppercase shadow-md game-btn border-blue-700">
+                  Rekrutieren
                </button>
             </div>
         ) : (
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 overflow-y-auto custom-scrollbar">
+           <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-3 pb-24 overflow-y-auto custom-scrollbar">
               {myHeroes.map((hero) => (
                  <div 
                     key={hero.id} 
                     onClick={() => setSelectedHero(hero)}
-                    className="bg-slate-900 border-2 border-slate-800 rounded-2xl overflow-hidden hover:border-slate-600 transition-colors group relative cursor-pointer active:scale-95"
+                    className="aspect-[3/4] rounded-2xl overflow-hidden relative shadow-md bg-slate-900 group cursor-pointer active:scale-95 transition-transform"
                  >
-                    <div className="h-32 bg-gradient-to-br from-slate-800 to-black relative overflow-hidden">
-                       <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-                       {/* Show Image (Video only plays in detail overlay) */}
-                       {hero.image.url && (
-                           <img src={hero.image.url} className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" />
-                       )}
-                       
-                       <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between z-10">
-                          <div>
-                             <h3 className="text-xl font-comic text-white tracking-wide drop-shadow-lg leading-none">{hero.name}</h3>
-                             <p className="text-[10px] text-blue-300 font-bold uppercase tracking-wider bg-blue-900/50 px-2 py-0.5 rounded inline-block mt-1 border border-blue-500/30">
-                                {hero.appearance.race}
-                             </p>
-                          </div>
-                          <div className={`
-                             w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg border-2
-                             ${hero.powerstats.power > 90 ? 'bg-yellow-500 text-black border-yellow-300' : 'bg-slate-700 text-white border-slate-600'}
-                          `}>
-                             {hero.powerstats.power}
-                          </div>
-                       </div>
-                    </div>
+                    {/* Hero Image */}
+                    {hero.image.url ? (
+                        <img src={hero.image.url} className="w-full h-full object-cover" />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-700 font-black text-4xl bg-slate-200">?</div>
+                    )}
                     
-                    <div className="p-4 space-y-3 relative bg-[#151e32]">
-                       <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed italic">
-                          "{hero.description}"
-                       </p>
-                       
-                       <div className="h-24 -mx-2 flex items-center justify-center pointer-events-none">
-                          <StatsRadar stats={hero.powerstats} />
-                       </div>
+                    {/* Gradient for text readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+
+                    {/* Level Badge Top Right */}
+                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm border border-white/20">
+                        LV 1
+                    </div>
+
+                    {/* Bottom Info */}
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <div className="flex gap-0.5 mb-1">
+                            {[1,2,3,4,5].map(i => <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />)}
+                        </div>
+                        <h3 className="text-white font-black uppercase text-sm leading-tight truncate">{hero.name}</h3>
+                        <p className="text-slate-400 text-[10px] font-bold uppercase">{hero.appearance.race}</p>
                     </div>
                  </div>
               ))}
@@ -1129,52 +599,78 @@ const AppContent = () => {
   const NavButton = ({ viewName, label, icon: Icon }: any) => {
     const isActive = view === viewName;
     return (
-      <button 
-        onClick={() => setView(viewName)} 
-        className={`
-          flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 w-16
-          ${isActive ? 'bg-slate-800 text-white -translate-y-2 shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-slate-600' : 'text-slate-500 hover:text-slate-300'}
-        `}
-      >
-          <Icon className={`w-5 h-5 ${isActive ? 'animate-bounce' : ''}`} />
-          <span className="text-[9px] font-bold uppercase tracking-wider">{label}</span>
+      <button onClick={() => setView(viewName)} className="flex-1 flex flex-col items-center justify-center gap-1 py-1 relative">
+          {isActive && <div className="absolute top-0 w-8 h-1 bg-blue-500 rounded-b-full"></div>}
+          <div className={`transition-transform duration-200 ${isActive ? '-translate-y-1' : ''}`}>
+             <Icon className={`w-6 h-6 ${isActive ? 'text-blue-600 fill-blue-100' : 'text-slate-400'}`} strokeWidth={isActive ? 2.5 : 2} />
+          </div>
+          <span className={`text-[10px] font-bold uppercase tracking-wide ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>{label}</span>
       </button>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#020617] text-white font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-[#f0f4f8] text-slate-900 font-sans overflow-hidden select-none">
         <main className="flex-1 overflow-hidden relative">
+            <SaveManager 
+                onSchemaError={() => setShowDbSetup(true)} 
+                onProfileClick={() => setShowAuth(true)}
+            />
             {view === 'forge' && renderForge()}
             {view === 'station' && renderStation()}
             {view === 'detail' && renderDetail()}
             {view === 'ai_lab' && <AiLab />}
-            {view === 'wiki' && renderWiki()}
+            {view === 'wiki' && <div className="p-8">Wiki Hidden</div>}
             {view === 'nanoforge' && <Nanoforge />}
-            
-            {/* Global Overlay for Details */}
+            {view === 'spire' && <SpireScreen myHeroes={myHeroes} onNavigateToRecruit={() => setView('forge')} onNavigateToInventory={() => setView('nanoforge')} />}
             {selectedHero && renderHeroOverlay()}
+            {showDbSetup && <DbSetupModal onClose={() => setShowDbSetup(false)} />}
+            {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
         </main>
-
-        <nav className="h-16 bg-[#0f172a] border-t border-slate-800 flex justify-between items-center px-4 shrink-0 z-30 shadow-[0_-5px_20px_rgba(0,0,0,0.5)] pb-safe-bottom">
+        <nav className="h-[70px] bg-white border-t border-slate-200 flex justify-around items-center px-2 shrink-0 z-30 pb-safe-bottom shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
             <NavButton viewName="station" label="Basis" icon={LayoutDashboard} />
-            <NavButton viewName="forge" label="Schmiede" icon={Hammer} />
-            <NavButton viewName="ai_lab" label="AI Lab" icon={Sparkles} />
-            {/* Swapped Wiki for Nanoforge in quick nav for gameplay focus, moved Wiki to secondary? Or keep all 6? 
-                Let's replace Wiki button with Nanoforge since we are focusing on gameplay now. */}
-            <NavButton viewName="nanoforge" label="N-Forge" icon={Cpu} />
-            <NavButton viewName="detail" label="Helden" icon={User} />
+            <NavButton viewName="forge" label="Rekrut" icon={Search} />
+            <NavButton viewName="spire" label="Turm" icon={Tower} />
+            <NavButton viewName="detail" label="Armee" icon={User} />
+            <NavButton viewName="nanoforge" label="Inventar" icon={Box} />
         </nav>
     </div>
   );
 };
 
-export default function App() {
+export const App = () => {
   return (
     <GameProvider>
       <InventoryProvider>
-        <AppContent />
+          <AppContentWithSpire />
       </InventoryProvider>
     </GameProvider>
   );
-}
+};
+
+const rarityMap: Record<string, ItemRarity> = {
+  'common': 'grey',
+  'uncommon': 'green',
+  'rare': 'blue',
+  'epic': 'purple',
+  'legendary': 'orange'
+};
+
+const AppContentWithSpire = () => {
+    const { addItem } = useInventory();
+    
+    return (
+        <SpireProvider unlockedHeroes={[]} onAddItem={(item) => {
+            addItem({
+                id: crypto.randomUUID(),
+                templateId: item.id,
+                name: item.name,
+                category: 'material', 
+                rarity: rarityMap[item.rarity] || 'grey',
+                description: item.description
+            }, item.quantity);
+        }}>
+            <AppContent />
+        </SpireProvider>
+    );
+};

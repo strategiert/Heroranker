@@ -25,6 +25,7 @@ export interface EquipmentItem extends BaseItem {
     hp?: number;
     spd?: number;
   };
+  equippedToId?: string; // ID of the hero wearing it, undefined if free
 }
 
 export interface ConsumableItem extends BaseItem {
@@ -50,8 +51,10 @@ interface InventoryContextType {
   inventory: InventoryState;
   addItem: (item: BaseItem, quantity?: number) => void;
   removeItem: (templateId: string, quantity?: number) => boolean;
-  equipItem: (heroId: string, itemId: string) => void;
+  equipItem: (itemId: string, heroId: string) => void;
+  unequipItem: (itemId: string) => void;
   useConsumable: (itemId: string) => void;
+  loadInventory: (newState: InventoryState) => void; // New function
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -70,6 +73,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.setItem('infinite_arena_inventory', JSON.stringify(inventory));
   }, [inventory]);
 
+  const loadInventory = (newState: InventoryState) => {
+      console.log("Loading Cloud Save for Inventory...");
+      setInventory(newState);
+  };
+
   const addItem = (item: BaseItem, quantity = 1) => {
     setInventory(prev => {
       const newState = { ...prev };
@@ -77,16 +85,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (item.category === 'material') {
         newState.materials[item.templateId] = (newState.materials[item.templateId] || 0) + quantity;
       } else if (item.category === 'consumable') {
-        // Simple array push for now, ideally strictly stacked by templateId
-        // keeping it simple for Phase 1: Treating consumables as individual instances if unique, 
-        // but typically materials/consumables are just counts.
-        // Let's assume consumables are stackable objects in a real list for UI
-        // For data core, we stick to array of items.
         for(let i=0; i<quantity; i++) {
            newState.consumables.push(item as ConsumableItem);
         }
       } else if (item.category === 'equipment') {
-        newState.equipment.push({ ...item as EquipmentItem, id: crypto.randomUUID() });
+        newState.equipment.push({ ...item as EquipmentItem, id: crypto.randomUUID(), equippedToId: undefined });
       }
 
       return newState;
@@ -98,9 +101,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return true;
   };
 
-  const equipItem = (heroId: string, itemId: string) => {
-    // Logic stub
-    console.log(`Equipping ${itemId} to ${heroId}`);
+  const equipItem = (itemId: string, heroId: string) => {
+    setInventory(prev => ({
+      ...prev,
+      equipment: prev.equipment.map(item => 
+        item.id === itemId ? { ...item, equippedToId: heroId } : item
+      )
+    }));
+  };
+
+  const unequipItem = (itemId: string) => {
+    setInventory(prev => ({
+      ...prev,
+      equipment: prev.equipment.map(item => 
+        item.id === itemId ? { ...item, equippedToId: undefined } : item
+      )
+    }));
   };
 
   const useConsumable = (itemId: string) => {
@@ -109,7 +125,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   return (
-    <InventoryContext.Provider value={{ inventory, addItem, removeItem, equipItem, useConsumable }}>
+    <InventoryContext.Provider value={{ inventory, addItem, removeItem, equipItem, unequipItem, useConsumable, loadInventory }}>
       {children}
     </InventoryContext.Provider>
   );

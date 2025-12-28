@@ -1,223 +1,187 @@
 import React, { useState } from 'react';
-import { Hammer, Zap, Shield, Cpu, Rocket, Sword, Box, AlertCircle, Info } from 'lucide-react';
+import { Hammer, Zap, Shield, Cpu, Rocket, Sword, Box, Search, Layers, Lock, Unlock, ArrowUp } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import { useInventory, EquipmentItem, ItemRarity, EquipmentSlot } from '../context/InventoryContext';
 
-// Blueprints Configuration
+// --- Configuration ---
+
 const BLUEPRINTS: { 
     id: string; 
     name: string; 
     slot: EquipmentSlot; 
     cost: { nanosteel: number, credits: number }; 
-    desc: string 
+    desc: string;
+    tier: number;
+    icon: any;
 }[] = [
-    { id: 'bp_wpn_basic', name: 'Plasma Rifle', slot: 'weapon', cost: { nanosteel: 150, credits: 50 }, desc: 'Standard issue energy weapon.' },
-    { id: 'bp_arm_basic', name: 'Alloy Plate', slot: 'armor', cost: { nanosteel: 200, credits: 100 }, desc: 'Lightweight nanofiber armor.' },
-    { id: 'bp_chp_basic', name: 'Targeting Chip', slot: 'chip', cost: { nanosteel: 100, credits: 200 }, desc: 'Increases processing speed.' },
-    { id: 'bp_prp_basic', name: 'Ion Thrusters', slot: 'propulsion', cost: { nanosteel: 150, credits: 150 }, desc: 'Standard mobility enhancement.' },
+    { id: 'bp_wpn_plasma', name: 'Plasma Rifle', slot: 'weapon', cost: { nanosteel: 150, credits: 50 }, desc: 'Standard issue weapon.', tier: 1, icon: Sword },
+    { id: 'bp_arm_composite', name: 'Composite Plate', slot: 'armor', cost: { nanosteel: 200, credits: 100 }, desc: 'Basic protection.', tier: 1, icon: Shield },
+    { id: 'bp_chp_ai', name: 'Combat A.I.', slot: 'chip', cost: { nanosteel: 100, credits: 200 }, desc: 'Response booster.', tier: 1, icon: Cpu },
+    { id: 'bp_prp_ion', name: 'Ion Thrusters', slot: 'propulsion', cost: { nanosteel: 150, credits: 150 }, desc: 'Mobility upgrade.', tier: 1, icon: Rocket },
 ];
 
-const RARITY_CONFIG: Record<ItemRarity, { color: string, chance: number, multi: number }> = {
-    'grey': { color: 'border-slate-600 text-slate-400', chance: 50, multi: 1 },
-    'green': { color: 'border-green-500 text-green-400 shadow-[0_0_10px_rgba(34,197,94,0.3)]', chance: 30, multi: 1.2 },
-    'blue': { color: 'border-blue-500 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]', chance: 15, multi: 1.5 },
-    'purple': { color: 'border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)]', chance: 4, multi: 2.0 },
-    'orange': { color: 'border-orange-500 text-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.5)]', chance: 1, multi: 3.0 },
+const RARITY_STYLES: Record<ItemRarity, { border: string, bg: string, text: string }> = {
+    'grey': { border: 'border-slate-300', bg: 'bg-slate-100', text: 'text-slate-600' },
+    'green': { border: 'border-green-400', bg: 'bg-green-50', text: 'text-green-600' },
+    'blue': { border: 'border-blue-400', bg: 'bg-blue-50', text: 'text-blue-600' },
+    'purple': { border: 'border-purple-400', bg: 'bg-purple-50', text: 'text-purple-600' },
+    'orange': { border: 'border-orange-400', bg: 'bg-orange-50', text: 'text-orange-600' },
 };
 
 const rollRarity = (): ItemRarity => {
     const roll = Math.random() * 100;
-    let sum = 0;
-    // Order matters: grey, green, blue, purple, orange
-    if (roll < RARITY_CONFIG.grey.chance) return 'grey';
-    sum += RARITY_CONFIG.grey.chance;
-    if (roll < sum + RARITY_CONFIG.green.chance) return 'green';
-    sum += RARITY_CONFIG.green.chance;
-    if (roll < sum + RARITY_CONFIG.blue.chance) return 'blue';
-    sum += RARITY_CONFIG.blue.chance;
-    if (roll < sum + RARITY_CONFIG.purple.chance) return 'purple';
+    if (roll < 50) return 'grey';
+    if (roll < 80) return 'green';
+    if (roll < 95) return 'blue';
+    if (roll < 99) return 'purple';
     return 'orange';
 };
 
-const ItemCard = ({ item }: { item: EquipmentItem }) => {
-    const style = RARITY_CONFIG[item.rarity];
+// --- Sub-Components ---
+
+interface ItemTileProps {
+  item: EquipmentItem;
+  onClick?: () => void;
+}
+
+const ItemTile: React.FC<ItemTileProps> = ({ item, onClick }) => {
+    const style = RARITY_STYLES[item.rarity];
     const SlotIcon = item.slot === 'weapon' ? Sword : item.slot === 'armor' ? Shield : item.slot === 'chip' ? Cpu : Rocket;
 
     return (
-        <div className={`bg-slate-900 border-2 rounded-xl p-3 flex items-center gap-3 relative overflow-hidden group ${style.color}`}>
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-            <div className={`w-12 h-12 rounded-lg bg-slate-950 flex items-center justify-center border border-white/10`}>
-                <SlotIcon className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start">
-                    <h4 className="font-bold text-sm truncate">{item.name}</h4>
-                    <span className="text-[9px] uppercase font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-white/10">LV {item.level}</span>
-                </div>
-                <div className="flex gap-2 text-[10px] opacity-70 mt-1">
-                    {item.stats.atk && <span>ATK +{item.stats.atk}</span>}
-                    {item.stats.def && <span>DEF +{item.stats.def}</span>}
-                    {item.stats.hp && <span>HP +{item.stats.hp}</span>}
-                    {item.stats.spd && <span>SPD +{item.stats.spd}</span>}
-                </div>
-            </div>
+        <div onClick={onClick} className={`
+            relative aspect-square rounded-xl border-2 ${style.border} ${style.bg}
+            flex flex-col items-center justify-center cursor-pointer shadow-sm
+            active:scale-95 transition-transform overflow-hidden
+        `}>
+             <div className="absolute top-1 right-1 bg-black/20 rounded-md px-1 text-[9px] font-bold text-slate-700">
+                L{item.level}
+             </div>
+             <SlotIcon className={`w-8 h-8 ${style.text} drop-shadow-sm`} />
+             <div className={`
+                absolute bottom-0 left-0 right-0 py-1 text-[9px] text-center font-bold uppercase truncate px-1
+                bg-white/80 backdrop-blur-sm text-slate-700
+             `}>
+                {item.name}
+             </div>
+             {item.equippedToId && (
+                 <div className="absolute top-1 left-1">
+                     <Lock className="w-3 h-3 text-slate-400" />
+                 </div>
+             )}
         </div>
     );
 };
 
-export const Nanoforge = () => {
-    const { deductResources, state } = useGame();
-    const { addItem, inventory } = useInventory();
-    const [selectedBP, setSelectedBP] = useState(BLUEPRINTS[0]);
-    const [isCrafting, setIsCrafting] = useState(false);
-    const [lastCrafted, setLastCrafted] = useState<EquipmentItem | null>(null);
+// --- Main Component ---
 
-    const handleCraft = async () => {
-        if (isCrafting) return;
-        
-        if (!deductResources(selectedBP.cost)) {
+export const Nanoforge = () => {
+    const { deductResources } = useGame();
+    const { addItem, inventory } = useInventory();
+    const [view, setView] = useState<'craft' | 'storage'>('storage');
+    const [craftingId, setCraftingId] = useState<string | null>(null);
+
+    const handleCraft = async (bp: typeof BLUEPRINTS[0]) => {
+        if (!deductResources(bp.cost)) {
             alert("Nicht genug Ressourcen!");
             return;
         }
 
-        setIsCrafting(true);
-        setLastCrafted(null);
-
-        // Fake crafting delay
-        await new Promise(r => setTimeout(r, 1000));
+        setCraftingId(bp.id);
+        
+        // Quick "pop" delay
+        await new Promise(r => setTimeout(r, 600));
 
         const rarity = rollRarity();
-        const multiplier = RARITY_CONFIG[rarity].multi;
-        const baseStat = Math.floor(10 * multiplier); // Simplified stat logic
+        const multiplier = rarity === 'orange' ? 3 : rarity === 'purple' ? 2 : rarity === 'blue' ? 1.5 : rarity === 'green' ? 1.2 : 1;
+        const baseStat = Math.floor(10 * multiplier); 
 
         const newItem: EquipmentItem = {
             id: crypto.randomUUID(),
-            templateId: selectedBP.id,
-            name: `${selectedBP.name} ${rarity === 'orange' ? 'MK-V' : rarity === 'purple' ? 'MK-IV' : ''}`,
+            templateId: bp.id,
+            name: `${bp.name}`,
             category: 'equipment',
             rarity: rarity,
-            slot: selectedBP.slot,
+            slot: bp.slot,
             level: 1,
-            description: selectedBP.desc,
+            description: bp.desc,
             stats: {}
         };
 
-        // Assign Stats based on Slot
-        if (selectedBP.slot === 'weapon') newItem.stats = { atk: baseStat };
-        if (selectedBP.slot === 'armor') newItem.stats = { def: baseStat, hp: baseStat * 5 };
-        if (selectedBP.slot === 'chip') newItem.stats = { atk: Math.floor(baseStat/2), spd: Math.floor(baseStat/2) };
-        if (selectedBP.slot === 'propulsion') newItem.stats = { spd: baseStat, hp: baseStat * 2 };
+        if (bp.slot === 'weapon') newItem.stats = { atk: baseStat };
+        if (bp.slot === 'armor') newItem.stats = { def: baseStat, hp: baseStat * 5 };
+        if (bp.slot === 'chip') newItem.stats = { atk: Math.floor(baseStat/2), spd: Math.floor(baseStat/2) };
+        if (bp.slot === 'propulsion') newItem.stats = { spd: baseStat, hp: baseStat * 2 };
 
         addItem(newItem);
-        setLastCrafted(newItem);
-        setIsCrafting(false);
+        setCraftingId(null);
+        setView('storage'); // Switch to storage to see new item
     };
 
-    const myItems = inventory.equipment;
-
     return (
-        <div className="h-full flex flex-col bg-[#0B1120] text-white">
-            {/* Header */}
-            <div className="p-4 bg-slate-900 border-b border-slate-800 shadow-xl z-10 flex justify-between items-center">
-                <h2 className="text-xl font-tech font-bold flex items-center gap-2 text-blue-400">
-                    <Hammer className="w-6 h-6" /> NANOFORGE v1.0
-                </h2>
-                <div className="flex gap-3 text-xs font-mono">
-                    <div className="flex items-center gap-1 text-blue-400"><Box className="w-3 h-3"/> {state.resources.nanosteel}</div>
-                    <div className="flex items-center gap-1 text-yellow-400"><Zap className="w-3 h-3"/> {state.resources.credits}</div>
-                </div>
+        <div className="h-full flex flex-col bg-[#f0f4f8] text-slate-800 font-sans">
+            {/* Top Bar Tabs */}
+            <div className="flex p-2 gap-2 bg-white shadow-sm z-10">
+                <button 
+                    onClick={() => setView('storage')}
+                    className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2
+                    ${view === 'storage' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                    <Box className="w-4 h-4"/> Inventar
+                </button>
+                <button 
+                    onClick={() => setView('craft')}
+                    className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2
+                    ${view === 'craft' ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                    <Hammer className="w-4 h-4"/> Fertigung
+                </button>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-                {/* Blueprints (Left) */}
-                <div className="w-1/3 bg-slate-900/50 border-r border-slate-800 overflow-y-auto custom-scrollbar p-2">
-                    <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-2">Blueprints</h3>
-                    <div className="space-y-2">
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                {view === 'storage' ? (
+                    inventory.equipment.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full opacity-40">
+                            <Box className="w-16 h-16 text-slate-400 mb-2" />
+                            <p className="font-bold text-slate-500">Leer</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+                            {/* Reverse to show newest first */}
+                            {[...inventory.equipment].reverse().map(item => (
+                                <ItemTile key={item.id} item={item} />
+                            ))}
+                        </div>
+                    )
+                ) : (
+                    <div className="space-y-3">
                         {BLUEPRINTS.map(bp => (
-                            <button 
-                                key={bp.id}
-                                onClick={() => { setSelectedBP(bp); setLastCrafted(null); }}
-                                className={`w-full text-left p-3 rounded-xl border transition-all relative overflow-hidden group
-                                    ${selectedBP.id === bp.id 
-                                        ? 'bg-blue-900/30 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
-                                        : 'bg-slate-900 border-slate-800 hover:border-slate-600'}
-                                `}
-                            >
-                                <div className="relative z-10">
-                                    <div className="font-bold text-sm text-slate-200">{bp.name}</div>
-                                    <div className="text-[10px] text-slate-500 flex gap-2 mt-1">
-                                        <span>Nano: {bp.cost.nanosteel}</span>
-                                        <span>Cr: {bp.cost.credits}</span>
+                            <div key={bp.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-200 flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 shrink-0">
+                                    <bp.icon className="w-8 h-8 text-slate-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-black text-slate-800 text-sm uppercase">{bp.name}</h3>
+                                    <p className="text-xs text-slate-500 mb-2 truncate">{bp.desc}</p>
+                                    <div className="flex gap-2 text-[10px] font-bold text-slate-400">
+                                        <span className="flex items-center gap-1"><Box className="w-3 h-3"/> {bp.cost.nanosteel}</span>
+                                        <span className="flex items-center gap-1"><Zap className="w-3 h-3"/> {bp.cost.credits}</span>
                                     </div>
                                 </div>
-                            </button>
+                                <button 
+                                    onClick={() => handleCraft(bp)}
+                                    disabled={craftingId !== null}
+                                    className={`
+                                        h-10 px-4 rounded-lg font-bold text-xs shadow-md uppercase tracking-wide
+                                        ${craftingId === bp.id ? 'bg-slate-300 text-white' : 'bg-green-500 text-white hover:bg-green-600 game-btn border-green-700'}
+                                    `}
+                                >
+                                    {craftingId === bp.id ? '...' : 'Craft'}
+                                </button>
+                            </div>
                         ))}
                     </div>
-                </div>
-
-                {/* Crafting Area (Center/Right) */}
-                <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-                    
-                    {/* Workstation */}
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center min-h-[200px] relative mb-6">
-                        
-                        {/* Blueprint Info */}
-                        <div className="absolute top-4 left-4">
-                            <h3 className="text-lg font-bold text-white">{selectedBP.name}</h3>
-                            <p className="text-xs text-slate-400 max-w-[200px]">{selectedBP.desc}</p>
-                        </div>
-
-                        {/* Crafting Animation / Result */}
-                        {isCrafting ? (
-                            <div className="flex flex-col items-center animate-pulse">
-                                <Hammer className="w-16 h-16 text-blue-500 mb-4 animate-bounce" />
-                                <span className="font-tech text-blue-400 tracking-widest">ASSEMBLING...</span>
-                            </div>
-                        ) : lastCrafted ? (
-                            <div className="w-full max-w-sm animate-in zoom-in duration-300">
-                                <div className="text-center text-xs font-bold text-green-400 mb-2">CRAFTING SUCCESSFUL</div>
-                                <ItemCard item={lastCrafted} />
-                            </div>
-                        ) : (
-                            <div className="w-24 h-24 rounded-full border-4 border-dashed border-slate-700 flex items-center justify-center opacity-50">
-                                <Hammer className="w-8 h-8 text-slate-600" />
-                            </div>
-                        )}
-
-                        {/* Craft Button */}
-                        <div className="absolute bottom-4 right-4">
-                            <button 
-                                onClick={handleCraft}
-                                disabled={isCrafting}
-                                className="game-btn bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <Hammer className="w-4 h-4" />
-                                <span>CRAFT</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Inventory List */}
-                    <div className="flex-1">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-sm font-bold text-slate-400 flex items-center gap-2">
-                                <Box className="w-4 h-4"/> INVENTORY ({myItems.length})
-                            </h3>
-                        </div>
-                        
-                        {myItems.length === 0 ? (
-                            <div className="text-center text-slate-600 py-10 text-xs italic">
-                                Inventory empty. Start crafting!
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                                {myItems.map(item => (
-                                    <ItemCard key={item.id} item={item} />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );

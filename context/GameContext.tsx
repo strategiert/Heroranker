@@ -9,6 +9,7 @@ interface GameContextType {
   collectResources: () => void;
   deductResources: (cost: Partial<Resources>) => boolean;
   debugAddResources: () => void;
+  loadState: (newState: GameState) => void; // New function
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -73,12 +74,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []); // Run once on mount
 
-  // --- Save Loop ---
+  // --- Save Loop (Local) ---
   useEffect(() => {
     const interval = setInterval(() => {
       const stateToSave = { ...stateRef.current, lastSaveTime: Date.now() };
       localStorage.setItem('infinite_arena_gamestate', JSON.stringify(stateToSave));
-    }, 5000); // Save every 5 seconds
+    }, 5000); // Save every 5 seconds locally
     return () => clearInterval(interval);
   }, []);
 
@@ -115,6 +116,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // --- Actions ---
+
+  const loadState = (newState: GameState) => {
+      console.log("Loading Cloud Save for Base...");
+      setState(newState);
+  };
 
   const startUpgrade = (buildingId: string) => {
     setState(prev => {
@@ -215,7 +221,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <GameContext.Provider value={{ state, startUpgrade, speedUpBuilding, collectResources, deductResources, debugAddResources }}>
+    <GameContext.Provider value={{ state, startUpgrade, speedUpBuilding, collectResources, deductResources, debugAddResources, loadState }}>
       {children}
     </GameContext.Provider>
   );
