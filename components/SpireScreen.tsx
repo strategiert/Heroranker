@@ -262,7 +262,7 @@ function SpireScreenInner({ unlockedHeroes }: SpireScreenInnerProps) {
                   <span className="font-bold text-white text-sm truncate">{selectedHero.name}</span>
                   {hasCounterBonus() && (
                     <span className="px-1 py-0.5 bg-green-500/20 border border-green-500/50 rounded text-[8px] font-bold text-green-400 shrink-0">
-                      +20%
+                      +25%
                     </span>
                   )}
                 </div>

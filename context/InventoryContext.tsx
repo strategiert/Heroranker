@@ -30,8 +30,8 @@ export interface EquipmentItem extends BaseItem {
 
 export interface ConsumableItem extends BaseItem {
   category: 'consumable';
-  effectType: 'speedup_build' | 'speedup_train' | 'resource_grant' | 'buff';
-  effectValue: number; // Seconds for speedups, Amount for resources
+  effectType?: 'speedup_build' | 'speedup_train' | 'resource_grant' | 'buff';
+  effectValue?: number; // Seconds for speedups, Amount for resources
 }
 
 export interface MaterialItem extends BaseItem {
@@ -54,7 +54,7 @@ interface InventoryContextType {
   equipItem: (itemId: string, heroId: string) => void;
   unequipItem: (itemId: string) => void;
   useConsumable: (itemId: string) => void;
-  loadInventory: (newState: InventoryState) => void; // New function
+  loadInventory: (newState: InventoryState) => void; 
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -97,8 +97,34 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const removeItem = (templateId: string, quantity = 1): boolean => {
-    // Logic stub
-    return true;
+    let success = false;
+    setInventory(prev => {
+        const newState = { ...prev };
+        
+        // Try removing from materials first
+        if (newState.materials[templateId] && newState.materials[templateId] >= quantity) {
+            newState.materials[templateId] -= quantity;
+            success = true;
+            return newState;
+        }
+
+        // Try removing from consumables
+        // This is a simple implementation: removes the first N items with matching templateId
+        const matchingIndices = newState.consumables
+            .map((item, index) => item.templateId === templateId ? index : -1)
+            .filter(idx => idx !== -1);
+        
+        if (matchingIndices.length >= quantity) {
+            // Filter out the items at specific indices
+            const indicesToRemove = new Set(matchingIndices.slice(0, quantity));
+            newState.consumables = newState.consumables.filter((_, index) => !indicesToRemove.has(index));
+            success = true;
+            return newState;
+        }
+
+        return prev; // No change if not enough items
+    });
+    return success;
   };
 
   const equipItem = (itemId: string, heroId: string) => {
@@ -120,7 +146,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const useConsumable = (itemId: string) => {
-    // Logic stub
     console.log(`Using ${itemId}`);
   };
 

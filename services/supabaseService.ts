@@ -4,63 +4,170 @@ import { GameState } from '../types/economy';
 import { InventoryState } from '../context/InventoryContext';
 import { SpireState } from '../context/SpireContext';
 
-// Safe environment access for browser environments
+// --- WICHTIGE KONFIGURATION ---
+// Damit Spieler das Spiel direkt starten können, trage hier deine Supabase Daten ein.
+// Diese Daten sind "public" (öffentlich) sicher, solange RLS (Row Level Security) in der Datenbank aktiv ist.
+
+const MANUAL_URL = 'https://uwzmldtoiulcezexsclo.supabase.co'; 
+const MANUAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3em1sZHRvaXVsY2V6ZXhzY2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4NTQxNTksImV4cCI6MjA4MjQzMDE1OX0.j4NL27vw0wRZUgPiF2yy-wMyNwXVnUlTibauiqIn0hk';
+
+// ------------------------------
+
 const getEnv = (key: string) => {
   try {
     // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) return process.env[key];
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+        // @ts-ignore
+        return import.meta.env[key];
+    }
   } catch (e) { }
   return '';
 };
 
-// Initialize Supabase Client using the Service Role Key to ensure access (Bypass RLS)
-const supabaseUrl = getEnv('SUPABASE_URL') || 'https://uwzmldtoiulcezexsclo.supabase.co';
-const supabaseKey = getEnv('SUPABASE_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3em1sZHRvaXVsY2V6ZXhzY2xvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Njg1NDE1OSwiZXhwIjoyMDgyNDMwMTU5fQ.NjD8tZ933Uba4ii3XxOEbNFa7atwrON80GlKpe6nmS0';
+// Helper to clean inputs (remove whitespace, trailing slash)
+const cleanConfig = (val: string | null | undefined) => {
+    if (!val) return '';
+    return val.trim().replace(/\/$/, '');
+};
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
-  }
-});
+// PRIORITY LOGIC:
+// 1. Vite Environment Variables (Best Practice für Produktion)
+// 2. Hardcoded Manual Variables (Einfachste Lösung für dich jetzt)
+// 3. LocalStorage (Fallback, falls der User es manuell eingegeben hat)
+
+const supabaseUrl = cleanConfig(getEnv('VITE_SUPABASE_URL')) || cleanConfig(MANUAL_URL) || cleanConfig(localStorage.getItem('sb_url'));
+const supabaseKey = cleanConfig(getEnv('VITE_SUPABASE_KEY') || getEnv('VITE_SUPABASE_ANON_KEY')) || cleanConfig(MANUAL_KEY) || cleanConfig(localStorage.getItem('sb_key'));
+
+export const isConfigured = () => {
+    return supabaseUrl.length > 0 && supabaseKey.length > 0;
+};
+
+export const updateConnection = (url: string, key: string) => {
+    localStorage.setItem('sb_url', url.trim().replace(/\/$/, ''));
+    localStorage.setItem('sb_key', key.trim());
+    window.location.reload();
+};
+
+// Create client only if configured to avoid errors
+export const supabase = createClient(
+    supabaseUrl || 'https://placeholder.supabase.co', 
+    supabaseKey || 'placeholder', 
+    {
+        auth: {
+            persistSession: true, 
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+            storage: localStorage
+        }
+    }
+);
+
+// --- AUTH FUNCTIONS ---
+
+export const signInWithGoogle = async () => {
+  if (!isConfigured()) return { error: { message: "Datenbank nicht verbunden." } };
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin, 
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  });
+  return { data, error };
+};
+
+export const signUpWithEmail = async (email: string, password: string) => {
+  if (!isConfigured()) return { error: { message: "Datenbank nicht verbunden." } };
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+  return { data, error };
+};
+
+export const signInWithEmail = async (email: string, password: string) => {
+  if (!isConfigured()) return { error: { message: "Datenbank nicht verbunden." } };
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  return { data, error };
+};
+
+export const signOut = async () => {
+  if (!isConfigured()) return { error: null };
+  const { error } = await supabase.auth.signOut();
+  return { error };
+};
+
+export const getCurrentUser = async () => {
+  if (!isConfigured()) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
+
+// --- DATA FUNCTIONS ---
 
 export const REQUIRED_TABLE_NAME = 'superheroes_raw';
 export const MY_HEROES_TABLE = 'my_heroes';
 export const SAVE_GAME_TABLE = 'save_games';
 
 export const SCHEMA_SQL = `
--- SYSTEM REPAIR SCRIPT
--- Führe dieses Skript im Supabase SQL Editor aus, um die Datenbank zu reparieren.
+-- SYSTEM REPAIR & SETUP SCRIPT
+-- Führe dieses Skript im Supabase SQL Editor aus.
 
--- 1. Tabelle 'my_heroes' (Deine Armee)
+-- 1. Tabelle 'my_heroes' (Die Armee der Spieler)
 DROP TABLE IF EXISTS my_heroes;
 CREATE TABLE my_heroes (
-    id text PRIMARY KEY,                   -- Eindeutige ID des Helden
-    data jsonb NOT NULL DEFAULT '{}'::jsonb, -- Alle Heldendaten als JSON
-    created_at timestamptz DEFAULT now()   -- Erstellungsdatum
+    id text PRIMARY KEY,                   -- UUID des Helden
+    user_id text NOT NULL,                 -- Wem gehört der Held?
+    data jsonb NOT NULL DEFAULT '{}'::jsonb, 
+    created_at timestamptz DEFAULT now()
 );
 
+-- RLS aktivieren
 ALTER TABLE my_heroes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public Heroes Access" ON my_heroes FOR ALL USING (true) WITH CHECK (true);
+
+-- Policy: Jeder darf lesen/schreiben, solange er seine ID benutzt (für Gäste & Auth)
+CREATE POLICY "Enable access for users based on ID" ON my_heroes
+FOR ALL
+USING (true)
+WITH CHECK (true);
 
 -- 2. Tabelle 'save_games' (Basis, Inventar, Spire)
 DROP TABLE IF EXISTS save_games;
 CREATE TABLE save_games (
-    user_id text PRIMARY KEY,              -- Eindeutige ID des Spielers (Browser-Instanz)
-    game_state jsonb DEFAULT '{}'::jsonb,  -- Basis-Daten (Gebäude, Ressourcen)
-    inventory_state jsonb DEFAULT '{}'::jsonb, -- Inventar (Items, Ausrüstung)
-    spire_state jsonb DEFAULT '{}'::jsonb, -- Turm-Fortschritt (Floor, Highscore)
-    updated_at timestamptz DEFAULT now()   -- Zeitstempel der letzten Speicherung
+    user_id text PRIMARY KEY,              -- ID des Spielers
+    game_state jsonb DEFAULT '{}'::jsonb,
+    inventory_state jsonb DEFAULT '{}'::jsonb,
+    spire_state jsonb DEFAULT '{}'::jsonb,
+    updated_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE save_games ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public Save Access" ON save_games FOR ALL USING (true) WITH CHECK (true);
 
--- System Status: BEREIT
+CREATE POLICY "Enable access for users based on ID" ON save_games
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+-- 3. Fix Berechtigungen für 'superheroes_raw' (Katalog)
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'superheroes_raw') THEN
+        ALTER TABLE "superheroes_raw" ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Enable read access for all users" ON "superheroes_raw";
+        CREATE POLICY "Enable read access for all users" ON "superheroes_raw" FOR SELECT USING (true);
+    END IF;
+END
+$$;
 `;
 
 export const listTables = async (): Promise<string[]> => {
+  if (!isConfigured()) return [];
   try {
     const { data, error } = await supabase
       .from('information_schema.tables')
@@ -89,8 +196,8 @@ const getPowerScore = (h: ExternalHero) => {
 };
 
 export const fetchRawHeroes = async (limit = 1000, offset = 0): Promise<ExternalHero[]> => {
-  if (!supabaseUrl || !supabaseKey) {
-     throw new Error("Supabase Credentials fehlen.");
+  if (!isConfigured()) {
+      throw new Error("API_KEY_MISSING");
   }
 
   const { data, error } = await supabase
@@ -99,11 +206,14 @@ export const fetchRawHeroes = async (limit = 1000, offset = 0): Promise<External
     .range(offset, offset + limit - 1);
 
   if (error) {
+      const msg = error.message || JSON.stringify(error);
       if (error.code === 'PGRST205' || error.code === '42P01') {
             throw new Error(`Tabelle '${REQUIRED_TABLE_NAME}' nicht gefunden.`);
       }
-      // Return a standard error object
-      throw new Error(`Supabase Error (${error.code}): ${error.message}`);
+      if (msg.includes('Failed to fetch')) {
+          throw new Error('Verbindung fehlgeschlagen. Bitte URL/Key prüfen.');
+      }
+      throw new Error(`Supabase Error (${error.code || 'ERR'}): ${msg}`);
   }
 
   if (!data) return [];
@@ -164,10 +274,13 @@ export const fetchRawHeroes = async (limit = 1000, offset = 0): Promise<External
 
 // --- HEROES SYNC ---
 
-export const fetchMyHeroes = async (): Promise<Hero[]> => {
+export const fetchMyHeroes = async (userId: string): Promise<Hero[]> => {
+    if (!isConfigured()) return [];
+    
     const { data, error } = await supabase
         .from(MY_HEROES_TABLE)
         .select('*')
+        .eq('user_id', userId) // Filter by user
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -179,6 +292,11 @@ export const fetchMyHeroes = async (): Promise<Hero[]> => {
             console.warn(`Tabelle '${MY_HEROES_TABLE}' noch nicht erstellt.`);
             throw new Error('TABLE_MISSING');
         }
+        // Column not found (usually user_id missing)
+        if (error.code === '42703') {
+             console.error("Datenbank Schema veraltet. Bitte SQL-Reparatur ausführen.");
+             throw new Error("SCHEMA_MISMATCH");
+        }
         console.error("Fetch My Heroes Error:", error.message || JSON.stringify(error));
         throw new Error(`Supabase Error (${error.code}): ${error.message}`);
     }
@@ -186,22 +304,24 @@ export const fetchMyHeroes = async (): Promise<Hero[]> => {
     return data ? data.map((row: any) => row.data) : [];
 };
 
-export const saveHero = async (hero: Hero): Promise<void> => {
+export const saveHero = async (hero: Hero, userId: string): Promise<void> => {
+    if (!isConfigured()) return;
+
     const { error } = await supabase
         .from(MY_HEROES_TABLE)
         .upsert({
             id: hero.id,
+            user_id: userId, // Associate with user
             data: hero
         });
 
     if (error) {
-        // Handle undefined column error specifically (PGRST204 = Columns not found in cache or DB)
         if (error.code === 'PGRST204' || error.code === '42703') {
-             console.error("SCHEMA FEHLER: Die Tabelle 'my_heroes' hat die falsche Struktur. Sie muss die Spalte 'data' (jsonb) enthalten. Bitte führe das SQL-Skript (DROP & CREATE) im Supabase Editor aus.");
+             console.error("SCHEMA FEHLER: Die Tabelle 'my_heroes' hat die falsche Struktur.");
              return;
         }
         if (error.code === 'PGRST205' || error.code === '42P01') {
-             console.error("Tabelle 'my_heroes' existiert nicht. Bitte SQL ausführen.");
+             console.error("Tabelle 'my_heroes' existiert nicht.");
              return; 
         }
         console.error(`Fehler beim Speichern (${error.code}):`, error.message || JSON.stringify(error));
@@ -217,6 +337,8 @@ export interface FullSaveData {
 }
 
 export const loadSaveGame = async (userId: string): Promise<FullSaveData | null> => {
+    if (!isConfigured()) return null;
+
     const { data, error } = await supabase
         .from(SAVE_GAME_TABLE)
         .select('*')
@@ -225,13 +347,11 @@ export const loadSaveGame = async (userId: string): Promise<FullSaveData | null>
 
     if (error) {
         if (error.code === 'PGRST116') return null; // No rows found, new user
-        
-        // Error 42703 = Column does not exist
         if (error.code === 'PGRST205' || error.code === '42P01' || error.code === '42703') {
-             console.warn(`Tabelle '${SAVE_GAME_TABLE}' defekt oder fehlt. (Fehler: ${error.code})`);
+             console.warn(`Tabelle '${SAVE_GAME_TABLE}' defekt oder fehlt.`);
              return null;
         }
-        console.error("Load Game Error:", error);
+        console.error("Load Game Error:", JSON.stringify(error));
         return null;
     }
 
@@ -243,6 +363,8 @@ export const loadSaveGame = async (userId: string): Promise<FullSaveData | null>
 };
 
 export const saveGameToCloud = async (userId: string, data: FullSaveData): Promise<{ success: boolean; error?: any }> => {
+    if (!isConfigured()) return { success: false, error: 'Not configured' };
+
     const { error } = await supabase
         .from(SAVE_GAME_TABLE)
         .upsert({
@@ -254,11 +376,10 @@ export const saveGameToCloud = async (userId: string, data: FullSaveData): Promi
         });
 
     if (error) {
-        // Error 42703 means column missing (likely user_id)
         if (error.code === '42703' || error.code === '42P01') {
-            console.error("CRITICAL: Datenbank-Struktur falsch. Tabelle 'save_games' fehlt die Spalte 'user_id' oder existiert nicht.");
+            console.error("CRITICAL: Datenbank-Struktur falsch.");
         } else {
-            console.error("Cloud Save Error:", error);
+            console.error("Cloud Save Error:", JSON.stringify(error));
         }
         return { success: false, error };
     }
@@ -266,6 +387,6 @@ export const saveGameToCloud = async (userId: string, data: FullSaveData): Promi
 };
 
 export const seedDatabase = async (onProgress?: (msg: string) => void) => {
-    console.warn("Seeding disabled by user request.");
+    console.warn("Seeding disabled.");
     return 0;
 };

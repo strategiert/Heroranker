@@ -2,12 +2,36 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Hero, ExternalHero } from '../types';
 import { GameState } from "../types/economy";
 
+// Safe environment access for browser environments
+const getEnv = (key: string) => {
+  try {
+    // 1. Check Vite env
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[`VITE_${key}`]) {
+        // @ts-ignore
+        return import.meta.env[`VITE_${key}`];
+    }
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+        // @ts-ignore
+        return import.meta.env[key];
+    }
+    
+    // 2. Check Node process.env (Fallback)
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env) return process.env[key];
+  } catch (e) { }
+  return '';
+};
+
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getEnv('API_KEY');
   if (!apiKey) {
-    throw new Error("API Key is missing.");
+    console.error("API Key missing. Please set API_KEY in your environment.");
+    // Return a dummy client or handle gracefully to prevent immediate crash on load
+    // In a real scenario, we might want to throw, but for UI stability logging is safer
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey || 'missing-key' });
 };
 
 // Utility to clean Markdown code blocks from JSON response
@@ -268,7 +292,8 @@ export const animateHeroPortrait = async (imageBase64: string, mimeType: string)
         if (!videoUri) throw new Error("Kein Video generiert.");
 
         // Fetch the actual bytes using the API key
-        const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+        const apiKey = getEnv('API_KEY');
+        const response = await fetch(`${videoUri}&key=${apiKey}`);
         const blob = await response.blob();
         return URL.createObjectURL(blob);
 
@@ -425,7 +450,8 @@ export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:
      const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
      if (!videoUri) throw new Error("Kein Video generiert.");
 
-     const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+     const apiKey = getEnv('API_KEY');
+     const response = await fetch(`${videoUri}&key=${apiKey}`);
      const blob = await response.blob();
      return URL.createObjectURL(blob);
 };

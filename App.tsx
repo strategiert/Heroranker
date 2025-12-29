@@ -1,37 +1,170 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
 import { 
   Database, Loader2, RefreshCw, AlertTriangle, Copy, 
   CheckSquare, Square, Shield, Hammer, User, LayoutDashboard, Zap, Search, ChevronRight, Brain, Activity, Dumbbell,
   Coins, Leaf, Box, Gem, ArrowUpCircle, Clock, Terminal, ChevronUp, Construction, Sparkles, MessageSquare, Image as ImageIcon, Video, Eye, Wand2,
-  Dice5, Layers, Book, Film, Cpu, Sword, Rocket, Trash2, Unlock, Lock, Star, TowerControl as Tower
+  Dice5, Layers, Book, Film, Cpu, Sword, Rocket, Trash2, Unlock, Lock, Star, TowerControl as Tower, Settings, X, 
+  Home, Factory, Warehouse, Radio, FlaskConical, Container, Signal, PlusCircle, Move, ZoomIn, ZoomOut, Maximize, AlertCircle, RefreshCcw
 } from 'lucide-react';
 import { Hero, ExternalHero, ViewState, EquipmentLoadout, WikiHero } from './types';
-import { fetchRawHeroes, listTables, SCHEMA_SQL, REQUIRED_TABLE_NAME, saveHero, fetchMyHeroes } from './services/supabaseService';
+import { fetchRawHeroes, listTables, SCHEMA_SQL, REQUIRED_TABLE_NAME, saveHero, fetchMyHeroes, updateConnection, isConfigured } from './services/supabaseService';
 import { transformHero, generateStrategicAdvice, chatWithAi, analyzeImage, generateProImage, editImage, generateVeoVideo, animateHeroPortrait } from './services/geminiService';
 import { FULL_HERO_DATA } from './services/fullHeroData';
 import { GameProvider, useGame } from './context/GameContext';
 import { InventoryProvider, useInventory, EquipmentItem, EquipmentSlot, ItemRarity } from './context/InventoryContext';
-// TowerProvider removed, handled in SpireScreen
-import { BuildingType, Resources } from './types/economy';
-import { calculateBuildingCost, calculateBuildTime, formatDuration } from './utils/formulas';
+import { BuildingType, Resources, BuildingCategory, BuildingState } from './types/economy';
+import { calculateCost, calculateBuildTime, formatDuration } from './utils/engine';
+import { BUILDING_DEFINITIONS } from './data/buildings';
+import { SKIN_DATABASE } from './data/skins';
+import { getMapBackgroundStyle, getMapAssetPath } from './utils/assets';
 import { StatsRadar } from './components/StatsRadar';
 import { Nanoforge } from './components/Nanoforge';
 import { SpireScreen } from './components/SpireScreen';
 import { SaveManager } from './components/SaveManager';
-import { AuthModal } from './components/AuthModal';
+import { ProfileScreen } from './components/ProfileScreen'; 
+import { RecruitmentCenter } from './components/RecruitmentCenter';
+import { MissionGuide } from './components/MissionGuide'; 
+import { BuildingDetailModal } from './components/BuildingDetailModal';
+import { BuildingTile } from './components/BuildingTile'; 
 import { SpireProvider, Item } from './context/SpireContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { MissionProvider } from './context/MissionContext'; 
 
-// --- Station Components ---
+// --- OFFLINE TOAST COMPONENT ---
+const OfflineToast = () => {
+    const { offlineGains, clearOfflineGains } = useGame();
+    if (!offlineGains) return null;
+
+    return (
+        <div className="fixed bottom-20 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 fade-in duration-500">
+            <div className="bg-slate-900/95 border border-green-500/50 rounded-2xl p-4 shadow-2xl backdrop-blur-md relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+                <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2 text-green-400">
+                        <Clock className="w-5 h-5" />
+                        <h3 className="font-bold font-mono">WELCOME BACK COMMANDER</h3>
+                    </div>
+                    <button onClick={clearOfflineGains} className="text-slate-500 hover:text-white"><X className="w-5 h-5"/></button>
+                </div>
+                <p className="text-slate-400 text-xs mb-3">
+                    Systeme liefen für <span className="text-white font-bold">{formatDuration(offlineGains.seconds)}</span> im Autopilot.
+                </p>
+                <div className="flex gap-3">
+                    {offlineGains.resources.credits > 0 && (
+                        <div className="bg-slate-800 px-3 py-1 rounded-lg flex items-center gap-2 border border-slate-700">
+                            <Coins className="w-4 h-4 text-yellow-500" />
+                            <span className="text-white font-bold text-sm">+{offlineGains.resources.credits}</span>
+                        </div>
+                    )}
+                    {offlineGains.resources.biomass > 0 && (
+                        <div className="bg-slate-800 px-3 py-1 rounded-lg flex items-center gap-2 border border-slate-700">
+                            <Leaf className="w-4 h-4 text-green-500" />
+                            <span className="text-white font-bold text-sm">+{offlineGains.resources.biomass}</span>
+                        </div>
+                    )}
+                    {offlineGains.resources.nanosteel > 0 && (
+                        <div className="bg-slate-800 px-3 py-1 rounded-lg flex items-center gap-2 border border-slate-700">
+                            <Box className="w-4 h-4 text-blue-500" />
+                            <span className="text-white font-bold text-sm">+{offlineGains.resources.nanosteel}</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- CONSTRUCTION MODAL ---
+const ConstructionModal = ({ onClose }: { onClose: () => void }) => {
+    const { state, constructBuilding } = useGame();
+    
+    // Group available buildings
+    const available = Object.values(BUILDING_DEFINITIONS).filter(def => {
+        // Exclude HQ, it's unique
+        if (def.type === 'HQ') return false;
+        
+        // Exclude if max count reached
+        const count = state.buildings.filter(b => b.type === def.id).length;
+        if (def.maxCount && count >= def.maxCount) return false;
+        
+        return true;
+    });
+
+    const handleBuild = (type: BuildingType) => {
+        constructBuilding(type);
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-[#f0f4f8] sm:rounded-2xl rounded-t-2xl w-full max-w-lg h-[80vh] sm:h-auto sm:max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
+                <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
+                    <div className="flex items-center gap-2 text-slate-800">
+                        <Hammer className="w-5 h-5 text-blue-600" />
+                        <h2 className="font-black text-lg uppercase tracking-wide">Bau-Menü</h2>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                    {available.map(def => {
+                        const cost = calculateCost(def, 0); // Cost for Level 0 -> 1
+                        const time = calculateBuildTime(def, 0);
+                        const canAfford = state.resources.credits >= cost.credits && state.resources.nanosteel >= cost.nanosteel && state.resources.biomass >= cost.biomass;
+
+                        return (
+                            <div key={def.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2">
+                                <div className="flex justify-between items-start">
+                                    <h3 className="font-black text-slate-800 text-sm uppercase">{def.name}</h3>
+                                    <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">
+                                        {formatDuration(time)}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-snug">{def.description}</p>
+                                
+                                <div className="flex items-center gap-2 mt-1">
+                                    {cost.credits > 0 && <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${state.resources.credits >= cost.credits ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>{cost.credits} Cr</span>}
+                                    {cost.nanosteel > 0 && <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${state.resources.nanosteel >= cost.nanosteel ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600'}`}>{cost.nanosteel} Ns</span>}
+                                    {cost.biomass > 0 && <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${state.resources.biomass >= cost.biomass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{cost.biomass} Bio</span>}
+                                </div>
+
+                                <button 
+                                    onClick={() => handleBuild(def.id as BuildingType)}
+                                    disabled={!canAfford}
+                                    className={`w-full py-3 mt-1 rounded-lg font-black text-xs uppercase tracking-wider shadow-sm transition-all active:scale-[0.98] ${
+                                        canAfford 
+                                        ? 'bg-blue-600 text-white hover:bg-blue-500' 
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    {canAfford ? 'Errichten' : 'Ressourcen fehlen'}
+                                </button>
+                            </div>
+                        );
+                    })}
+                    {available.length === 0 && (
+                        <div className="text-center py-10 text-slate-400 text-sm font-bold">
+                            Maximale Gebäudekapazität erreicht.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const ResourceDisplay = () => {
   const { state } = useGame();
   const res = state.resources;
 
   const Item = ({ icon: Icon, val, bg, text }: any) => (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${bg} border border-white/10 shadow-sm`}>
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${bg} border border-white/10 shadow-sm whitespace-nowrap`}>
        <Icon className={`w-4 h-4 ${text}`} />
        <span className="font-bold text-sm text-slate-800">
-          {val >= 10000 ? (val / 1000).toFixed(1) + 'k' : val}
+          {val >= 10000 ? (val / 1000).toFixed(1) + 'k' : Math.floor(val)}
        </span>
     </div>
   );
@@ -46,103 +179,170 @@ const ResourceDisplay = () => {
   );
 };
 
-const BuildingGrid = () => {
-  const { state, startUpgrade, speedUpBuilding } = useGame();
+// --- INTERACTIVE MAP COMPONENT ---
+const InteractiveMap = () => {
+  const { state, speedUpBuilding } = useGame();
+  const [showBuildModal, setShowBuildModal] = useState(false);
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingState | null>(null);
+  
+  const [mapError, setMapError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0); // For cache busting/retry
+  
+  // Viewport & Transform State
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState({ x: -200, y: -200, scale: 0.6 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
-  const getStyle = (type: BuildingType) => {
-    switch (type) {
-      case BuildingType.COMMAND_CENTER: return { iconBg: 'bg-yellow-500', iconColor: 'text-white' };
-      case BuildingType.HYDROPONICS: return { iconBg: 'bg-green-500', iconColor: 'text-white' };
-      case BuildingType.NANO_FOUNDRY: return { iconBg: 'bg-blue-500', iconColor: 'text-white' };
-      case BuildingType.CREDIT_TERMINAL: return { iconBg: 'bg-purple-500', iconColor: 'text-white' };
-      default: return { iconBg: 'bg-slate-500', iconColor: 'text-white' };
-    }
-  };
-
-  const getIcon = (type: BuildingType) => {
-    switch (type) {
-      case BuildingType.COMMAND_CENTER: return Shield;
-      case BuildingType.HYDROPONICS: return Leaf;
-      case BuildingType.NANO_FOUNDRY: return Box;
-      case BuildingType.CREDIT_TERMINAL: return Coins;
-      default: return Square;
-    }
-  };
-
-  const getLabel = (type: BuildingType) => {
-      switch (type) {
-        case BuildingType.COMMAND_CENTER: return 'Zentrale';
-        case BuildingType.HYDROPONICS: return 'Farm';
-        case BuildingType.NANO_FOUNDRY: return 'Schmiede';
-        case BuildingType.CREDIT_TERMINAL: return 'Bank';
-        default: return type;
+  // Center Map on Mount
+  useEffect(() => {
+      if (containerRef.current) {
+          const parent = containerRef.current.parentElement;
+          if (parent) {
+              const x = (parent.clientWidth - 1920 * 0.6) / 2;
+              const y = (parent.clientHeight - 1080 * 0.6) / 2;
+              setTransform({ x, y, scale: 0.6 }); 
+          }
       }
+  }, []);
+
+  const handleRetryMap = () => {
+      setMapError(false);
+      setRetryCount(prev => prev + 1);
+  };
+
+  // Mouse Handlers for Panning
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    setStartPos({ x: clientX - transform.x, y: clientY - transform.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDragging) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    setTransform(prev => ({
+        ...prev,
+        x: clientX - startPos.x,
+        y: clientY - startPos.y
+    }));
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  // Zoom Handlers
+  const handleZoom = (delta: number) => {
+      setTransform(prev => ({
+          ...prev,
+          scale: Math.min(3, Math.max(0.3, prev.scale + delta))
+      }));
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 custom-scrollbar">
-       <div className="grid grid-cols-2 gap-4">
-          {state.buildings.map((b) => {
-             const style = getStyle(b.type);
-             const Icon = getIcon(b.type);
-             const isUpgrading = b.status === 'UPGRADING';
-             
-             let timeLeft = 0;
-             if (isUpgrading && b.finishTime) {
-                timeLeft = Math.max(0, Math.ceil((b.finishTime - Date.now()) / 1000));
-             }
+    <div className="flex-1 relative overflow-hidden bg-[#0f172a] h-full cursor-grab active:cursor-grabbing touch-none select-none">
+        
+        {/* MAP CONTAINER */}
+        <div 
+            ref={containerRef}
+            className="absolute origin-top-left transition-transform duration-75 ease-linear"
+            style={{ 
+                transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+                width: '1920px', // Fixed large size for map (16:9 1080p)
+                height: '1080px' 
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleMouseDown}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={handleMouseUp}
+        >
+            {/* BACKGROUND IMAGE */}
+            {!mapError ? (
+                <img 
+                    key={retryCount}
+                    src={`${getMapAssetPath()}?v=${retryCount}`} 
+                    alt="Station Map" 
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    onError={() => {
+                        console.error("Failed to load map image from: ", getMapAssetPath());
+                        setMapError(true);
+                    }}
+                />
+            ) : (
+                // Fallback Grid Visual (Simulation Mode)
+                <div 
+                    className="absolute inset-0 w-full h-full" 
+                    style={getMapBackgroundStyle()} 
+                >
+                    <div className="absolute top-4 left-4 pointer-events-auto">
+                        <div className="bg-slate-900/80 border border-blue-500/30 p-2 rounded-lg flex items-center gap-3 backdrop-blur-md shadow-lg">
+                            <Activity className="w-4 h-4 text-blue-400 animate-pulse" />
+                            <div>
+                                <div className="text-[10px] text-blue-200 font-bold uppercase tracking-wider">Holo-Simulation</div>
+                                <div className="text-[8px] text-slate-500">Video-Link unterbrochen</div>
+                            </div>
+                            <button 
+                                onClick={handleRetryMap}
+                                className="ml-2 p-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                                title="Verbindung neu aufbauen"
+                            >
+                                <RefreshCcw className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-             return (
-               <div key={b.id} className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 relative overflow-hidden group active:scale-[0.98] transition-transform">
-                  
-                  {/* Header Level Badge */}
-                  <div className="flex justify-between items-start mb-3">
-                      <div className={`w-12 h-12 rounded-xl ${style.iconBg} flex items-center justify-center shadow-md`}>
-                          <Icon className={`w-7 h-7 ${style.iconColor}`} />
-                      </div>
-                      <div className="bg-slate-100 text-slate-600 text-xs font-black px-2 py-1 rounded-md">
-                          LV {b.level}
-                      </div>
-                  </div>
+            {/* BUILDING GRID OVERLAY */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="grid grid-cols-4 gap-12 p-20 w-full max-w-[1400px] pointer-events-auto">
+                    {state.buildings.map((b) => (
+                        <div key={b.id} className="transition-transform hover:scale-105 active:scale-95 duration-200">
+                            <BuildingTile 
+                                building={b}
+                                onSelect={setSelectedBuilding}
+                                onSpeedUp={speedUpBuilding}
+                            />
+                        </div>
+                    ))}
+                    
+                    {/* ADD BUTTON */}
+                    <button 
+                        onClick={() => setShowBuildModal(true)} 
+                        className="aspect-square rounded-2xl p-4 flex flex-col items-center justify-center text-slate-500/50 gap-3 border-4 border-dashed border-slate-600/30 hover:bg-slate-800/50 hover:border-blue-500/50 hover:text-blue-400 transition-all bg-slate-900/40 backdrop-blur-sm group hover:scale-105 active:scale-95"
+                    >
+                        <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                            <PlusCircle className="w-8 h-8 group-hover:text-blue-400" />
+                        </div>
+                        <span className="font-bold text-sm uppercase tracking-wide">Neues Gebäude</span>
+                    </button>
+                </div>
+            </div>
+        </div>
 
-                  <h4 className="font-black text-slate-800 text-lg uppercase mb-1">{getLabel(b.type)}</h4>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">
-                      {isUpgrading ? 'WIRD GEBAUT...' : 'PRODUKTIV'}
-                  </p>
+        {/* HUD CONTROLS */}
+        <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
+            <button onClick={() => handleZoom(0.2)} className="w-10 h-10 bg-slate-900/80 backdrop-blur border border-slate-700 text-white rounded-xl flex items-center justify-center shadow-lg active:scale-95"><ZoomIn className="w-5 h-5"/></button>
+            <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 bg-slate-900/80 backdrop-blur border border-slate-700 text-white rounded-xl flex items-center justify-center shadow-lg active:scale-95"><ZoomOut className="w-5 h-5"/></button>
+            <button onClick={() => setTransform({x: -200, y: -200, scale: 0.6})} className="w-10 h-10 bg-blue-600 border border-blue-500 text-white rounded-xl flex items-center justify-center shadow-lg active:scale-95"><Maximize className="w-5 h-5"/></button>
+        </div>
 
-                  {isUpgrading ? (
-                      <div>
-                          <div className="flex justify-between text-xs font-bold text-blue-600 mb-1">
-                              <span>Fertig in:</span>
-                              <span>{formatDuration(timeLeft)}</span>
-                          </div>
-                          <div className="h-2 bg-slate-200 rounded-full overflow-hidden w-full mb-3">
-                             <div className="h-full bg-blue-500 w-full animate-pulse"></div>
-                          </div>
-                          <button 
-                             onClick={() => speedUpBuilding(b.id, 60)}
-                             className="w-full py-2 bg-blue-500 text-white rounded-xl font-black text-xs shadow-sm uppercase"
-                          >
-                             Beschleunigen
-                          </button>
-                      </div>
-                  ) : (
-                      <button 
-                         onClick={() => startUpgrade(b.id)}
-                         className="w-full py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-black text-sm shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-[4px] transition-all uppercase flex items-center justify-center gap-2"
-                      >
-                         <Construction className="w-4 h-4" /> Upgrade
-                      </button>
-                  )}
-               </div>
-             );
-          })}
-       </div>
+        {showBuildModal && <ConstructionModal onClose={() => setShowBuildModal(false)} />}
+        {selectedBuilding && (
+            <BuildingDetailModal 
+                building={selectedBuilding} 
+                onClose={() => setSelectedBuilding(null)} 
+            />
+        )}
     </div>
   );
 };
 
-// ... (AiLab component unchanged) ...
+// ... AiLab ... (No change)
 const AiLab = () => {
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState<string | null>(null);
@@ -232,10 +432,12 @@ const AiLab = () => {
   );
 };
 
-// --- DATABASE SETUP MODAL ---
+// ... DbSetupModal ... (No change)
 const DbSetupModal = ({ onClose }: { onClose: () => void }) => {
     const [copied, setCopied] = useState(false);
-    const userId = localStorage.getItem('infinite_arena_user_id') || 'Wird geladen...';
+    const [url, setUrl] = useState(localStorage.getItem('sb_url') || 'https://uwzmldtoiulcezexsclo.supabase.co');
+    const [key, setKey] = useState(localStorage.getItem('sb_key') || '');
+    const [view, setView] = useState<'config' | 'schema'>('config');
 
     const handleCopy = () => {
         navigator.clipboard.writeText(SCHEMA_SQL);
@@ -243,60 +445,52 @@ const DbSetupModal = ({ onClose }: { onClose: () => void }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handleSaveConfig = () => {
+        const cleanUrl = url.trim();
+        const cleanKey = key.trim();
+        if (!cleanUrl || !cleanKey) {
+            alert("Bitte URL und Key eingeben.");
+            return;
+        }
+        updateConnection(cleanUrl, cleanKey);
+    };
+
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
-                    <div className="flex items-center gap-2 text-red-400">
-                        <Terminal className="w-5 h-5" />
-                        <h2 className="font-bold font-mono">SYSTEM INITIALIZATION REQUIRED</h2>
+                    <div className="flex items-center gap-2 text-blue-400">
+                        <Settings className="w-5 h-5" />
+                        <h2 className="font-bold font-mono">SYSTEM CONFIGURATION</h2>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
                 </div>
-                
-                <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
-                    <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
-                        <span className="text-slate-400 text-xs font-bold uppercase">Deine User ID:</span>
-                        <code className="text-blue-400 text-xs font-mono bg-slate-900 px-2 py-1 rounded">{userId}</code>
-                    </div>
-
-                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-200 text-sm leading-relaxed">
-                        <strong>Datenbank-Status:</strong> Tabellen fehlen oder sind veraltet. Automatische Speicherung ist pausiert.
-                    </div>
-
-                    <div className="space-y-2">
-                        <h3 className="text-slate-300 font-bold text-sm uppercase tracking-wide">Anleitung:</h3>
-                        <ol className="list-decimal list-inside text-slate-400 text-sm space-y-1 ml-2">
-                            <li>Kopiere den SQL-Code unten.</li>
-                            <li>Öffne dein Supabase Dashboard.</li>
-                            <li>Gehe zum <strong>SQL Editor</strong>.</li>
-                            <li>Füge den Code ein und klicke auf <strong>RUN</strong>.</li>
-                        </ol>
-                    </div>
-
-                    <div className="relative group">
-                        <div className="absolute top-2 right-2">
-                            <button 
-                                onClick={handleCopy}
-                                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-                            >
-                                {copied ? <CheckSquare className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                {copied ? 'KOPIERT' : 'COPY SQL'}
-                            </button>
-                        </div>
-                        <pre className="bg-black rounded-xl p-4 text-xs font-mono text-green-400 overflow-x-auto border border-slate-800 shadow-inner">
-                            {SCHEMA_SQL}
-                        </pre>
-                    </div>
+                <div className="p-2 bg-slate-950 border-b border-slate-800 flex gap-2">
+                    <button onClick={() => setView('config')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'config' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>VERBINDUNG</button>
+                    <button onClick={() => setView('schema')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${view === 'schema' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>DATENBANK REPARATUR</button>
                 </div>
-
-                <div className="p-4 border-t border-slate-800 bg-slate-950 rounded-b-2xl flex justify-end">
-                    <button 
-                        onClick={() => window.location.reload()}
-                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold uppercase tracking-wide shadow-lg active:scale-95 transition-all"
-                    >
-                        System Neustarten
-                    </button>
+                <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+                    {view === 'config' ? (
+                        <div className="space-y-4">
+                            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm leading-relaxed">
+                                <h3 className="font-bold mb-1 text-blue-400">API Verbindung fehlt</h3>
+                                Damit die App funktioniert, müssen die Supabase Zugangsdaten hinterlegt werden.
+                            </div>
+                            <div className="space-y-3">
+                                <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Project URL</label><input type="text" value={url} onChange={(e) => setUrl(e.target.value)} className="w-full bg-black border border-slate-700 rounded-lg p-3 text-sm text-white font-mono focus:border-blue-500 outline-none"/></div>
+                                <div><label className="text-xs font-bold text-slate-500 uppercase block mb-1">Anon Public Key</label><input type="text" value={key} onChange={(e) => setKey(e.target.value)} className="w-full bg-black border border-slate-700 rounded-lg p-3 text-sm text-white font-mono focus:border-blue-500 outline-none"/></div>
+                            </div>
+                            <button onClick={handleSaveConfig} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold uppercase tracking-wide shadow-lg active:scale-95 transition-all">Speichern & Verbinden</button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 text-xs text-slate-400">Kopiere diesen SQL-Code und führe ihn im <strong>Supabase SQL Editor</strong> aus.</div>
+                            <div className="relative group">
+                                <div className="absolute top-2 right-2"><button onClick={handleCopy} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>{copied ? <CheckSquare className="w-3 h-3" /> : <Copy className="w-3 h-3" />}{copied ? 'KOPIERT' : 'COPY SQL'}</button></div>
+                                <pre className="bg-black rounded-xl p-4 text-xs font-mono text-green-400 overflow-x-auto border border-slate-800 shadow-inner h-64">{SCHEMA_SQL}</pre>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -307,108 +501,64 @@ const AppContent = () => {
   const [view, setView] = useState<ViewState>('station');
   const [selectedHero, setSelectedHero] = useState<Hero | WikiHero | null>(null);
   
-  // Forge State
   const [importedHeroes, setImportedHeroes] = useState<ExternalHero[]>([]);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
   const [dbError, setDbError] = useState(false);
+  const [dbErrorMsg, setDbErrorMsg] = useState('');
   const [showDbSetup, setShowDbSetup] = useState(false); 
-  const [showAuth, setShowAuth] = useState(false); // NEW AUTH STATE
-  const [searchTerm, setSearchTerm] = useState('');
   
-  // Selection & Processing
-  const [selectedImportIds, setSelectedImportIds] = useState<Set<number>>(new Set());
-  const [processedIndices, setProcessedIndices] = useState<Set<number>>(new Set());
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
-  const [generationStep, setGenerationStep] = useState('');
-  
-  // My Heroes & Inventory
   const [myHeroes, setMyHeroes] = useState<Hero[]>([]);
   const { inventory, equipItem, unequipItem } = useInventory();
   
-  // Animation State
+  const { user, guestId } = useAuth();
+  const effectiveUserId = user ? user.id : guestId;
   const [isAnimatingHero, setIsAnimatingHero] = useState(false);
 
-  // Initial Load
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+      if (!isConfigured()) {
+          setShowDbSetup(true);
+          setDbError(true);
+          setDbErrorMsg("Setup Required");
+      } else {
+          loadData(); 
+      }
+  }, [effectiveUserId]);
 
   const loadData = async () => {
     setIsLoadingDb(true);
     setDbError(false);
+    setDbErrorMsg('');
     setImportedHeroes([]); 
     try {
-      await listTables(); 
-      // Fetch concurrently, but handle specific errors for my_heroes separately
       const rawHeroes = await fetchRawHeroes(500);
       setImportedHeroes(rawHeroes);
       
       try {
-          const playerHeroes = await fetchMyHeroes();
+          const playerHeroes = await fetchMyHeroes(effectiveUserId);
           setMyHeroes(playerHeroes);
       } catch (e: any) {
-          // If my_heroes fetch fails specifically (likely table missing), trigger DB Error mode
           if (e.message === 'TABLE_MISSING' || e.message.includes('relation "my_heroes" does not exist')) {
               console.error("Critical: Heroes table missing");
               setDbError(true);
+              setDbErrorMsg("Tabellen fehlen");
+          } else if (e.message === 'API_KEY_MISSING') {
+              setDbError(true);
+              setDbErrorMsg("API Key fehlt");
+              setShowDbSetup(true);
+          } else if (e.message === 'SCHEMA_MISMATCH') {
+              setDbError(true);
+              setDbErrorMsg("DB Schema Update nötig");
+              setShowDbSetup(true);
+          } else {
+              throw e;
           }
       }
     } catch (e: any) {
       console.error("Datenbank Fehler:", e.message);
-      // General DB error
       setDbError(true);
+      setDbErrorMsg(e.message || "Verbindungsfehler");
+      if (e.message === 'API_KEY_MISSING') setShowDbSetup(true);
     } finally { setIsLoadingDb(false); }
-  };
-
-  // ... (Other handlers kept same as existing) ...
-  const toggleImportSelection = (idx: number) => {
-    const newSet = new Set(selectedImportIds);
-    if (newSet.has(idx)) newSet.delete(idx); else newSet.add(idx);
-    setSelectedImportIds(newSet);
-  };
-
-  const handleSelectRandom = (count: number) => {
-    const available = importedHeroes.map((_, idx) => idx).filter(idx => !processedIndices.has(idx) && (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
-    const shuffled = [...available].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, count);
-    const newSet = new Set(selectedImportIds);
-    selected.forEach(id => newSet.add(id));
-    setSelectedImportIds(newSet);
-  };
-
-  const handleSelectAll = () => {
-     const available = importedHeroes.map((_, idx) => idx).filter(idx => !processedIndices.has(idx) && (importedHeroes[idx].name.toLowerCase().includes(searchTerm.toLowerCase()) || (importedHeroes[idx].publisher && importedHeroes[idx].publisher!.toLowerCase().includes(searchTerm.toLowerCase()))));
-     const newSet = new Set(selectedImportIds);
-     available.forEach(id => newSet.add(id));
-     setSelectedImportIds(newSet);
-  };
-
-  const handleBatchTransform = async () => {
-    if (selectedImportIds.size === 0) return;
-    setIsGenerating(true);
-    setGenerationStep('Verarbeite...');
-    let current = 0;
-    const total = selectedImportIds.size;
-    setBatchProgress({ current, total });
-    const indices = Array.from(selectedImportIds);
-    
-    for (const idx of indices) {
-      const sourceHero = importedHeroes[idx];
-      setGenerationStep(`${sourceHero.name}...`);
-      try {
-        const newHero = await transformHero(sourceHero);
-        setGenerationStep(`Speichere...`);
-        await saveHero(newHero);
-        setMyHeroes(prev => [newHero, ...prev]); 
-        setProcessedIndices(prev => new Set(prev).add(idx));
-        setSelectedImportIds(prev => { const next = new Set(prev); next.delete(idx); return next; });
-      } catch (e: any) { console.error(`Error transforming ${sourceHero.name}:`, e); }
-      current++;
-      setBatchProgress({ current, total });
-    }
-    setIsGenerating(false);
-    setBatchProgress(null);
-    setGenerationStep('');
-    setView('detail'); 
   };
   
   const handleAnimateHero = async (hero: Hero) => {
@@ -421,73 +571,23 @@ const AppContent = () => {
           const updatedHero = { ...hero, video: { url: videoUrl } };
           setMyHeroes(prev => prev.map(h => h.id === hero.id ? updatedHero : h));
           setSelectedHero(updatedHero);
-          await saveHero(updatedHero);
+          await saveHero(updatedHero, effectiveUserId);
       } catch (e: any) { alert("Animation fehlgeschlagen: " + e.message); } finally { setIsAnimatingHero(false); }
   };
 
-  const filteredHeroes = importedHeroes.filter(h => h.name.toLowerCase().includes(searchTerm.toLowerCase()) || (h.publisher && h.publisher.toLowerCase().includes(searchTerm.toLowerCase())));
+  const handleHeroRecruited = (newHero: Hero) => {
+      setMyHeroes(prev => [newHero, ...prev]);
+  };
 
   const renderStation = () => (
     <div className="h-full flex flex-col bg-[#f0f4f8] overflow-hidden">
       <ResourceDisplay />
-      <div className="flex-1 overflow-hidden relative">
-        <BuildingGrid />
-      </div>
+      <InteractiveMap />
     </div>
   );
 
-  const renderForge = () => {
-    if (isGenerating) {
-      return (
-        <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 bg-white">
-          <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
-          <h2 className="text-2xl font-black text-slate-800">{generationStep}</h2>
-          {batchProgress && (
-             <div className="w-full max-w-md space-y-2">
-                <div className="flex justify-between text-xs text-slate-400 font-bold uppercase"><span>Verarbeitung</span><span>{batchProgress.current} / {batchProgress.total}</span></div>
-                <div className="h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200"><div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}></div></div>
-             </div>
-          )}
-        </div>
-      );
-    }
-    return (
-      <div className="h-full flex flex-col bg-[#f0f4f8]">
-        <div className="p-4 bg-white border-b border-slate-200 space-y-4 shadow-sm z-10">
-            <div className="flex justify-between items-center">
-               <h2 className="text-lg font-black text-slate-800 flex items-center gap-2"><Hammer className="w-6 h-6 text-orange-500" /> REKRUTIERUNG</h2>
-               <div className="flex items-center gap-2 text-[10px]">
-                   <div className={`w-2 h-2 rounded-full ${isLoadingDb ? 'bg-yellow-500 animate-pulse' : dbError ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                   <span className="text-slate-400 uppercase font-bold">{isLoadingDb ? 'LADEN...' : dbError ? 'FEHLER' : 'ONLINE'}</span>
-                   {dbError && (
-                       <button 
-                         onClick={() => setShowDbSetup(true)}
-                         className="ml-2 bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 hover:bg-red-200 transition-colors animate-pulse"
-                       >
-                           REPARIEREN
-                       </button>
-                   )}
-               </div>
-            </div>
-            <div className="flex gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Datenbank durchsuchen..." className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 placeholder-slate-400 font-medium"/></div></div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-               <button onClick={() => handleSelectRandom(5)} className="px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 active:scale-95"><Dice5 className="w-3 h-3" /> Zufall (5)</button>
-               <button onClick={handleSelectAll} className="px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 whitespace-nowrap flex items-center gap-1 active:scale-95"><Layers className="w-3 h-3" /> Alle</button>
-               <div className="flex-1" />
-               {selectedImportIds.size > 0 && <button onClick={handleBatchTransform} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-bold text-white shadow-md flex items-center gap-2 animate-in fade-in slide-in-from-right-4 game-btn border-blue-800"><Hammer className="w-3 h-3" /> START ({selectedImportIds.size})</button>}
-            </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-           {filteredHeroes.length === 0 ? <div className="text-center text-slate-400 mt-20"><Database className="w-12 h-12 mx-auto mb-2 opacity-20" /><p className="font-bold">Keine Daten.</p></div> : <div className="grid grid-cols-1 gap-3 pb-24">{filteredHeroes.map((h, idx) => { const originalIndex = importedHeroes.indexOf(h); if (originalIndex === -1 || processedIndices.has(originalIndex)) return null; const isSelected = selectedImportIds.has(originalIndex); return (<div key={originalIndex} onClick={() => toggleImportSelection(originalIndex)} className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.99] ${isSelected ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-100 shadow-sm'}`}><div className="flex justify-between items-start"><div><h3 className={`font-black text-sm uppercase ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{h.name}</h3><p className="text-[10px] text-slate-400 uppercase font-bold mt-1">{h.publisher} • {h.race}</p></div><div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-slate-200 text-transparent'}`}><CheckSquare className="w-4 h-4" /></div></div></div>); })}</div>}
-        </div>
-      </div>
-    );
-  };
-
-  // ... (renderHeroOverlay, renderDetail helpers omitted for brevity) ...
   const renderHeroOverlay = () => {
       if (!selectedHero) return null;
-
       const isMyHero = 'powerstats' in selectedHero;
       const hasVideo = isMyHero && 'video' in selectedHero && (selectedHero as Hero).video?.url;
       const name = selectedHero.name;
@@ -495,7 +595,6 @@ const AppContent = () => {
       
       return (
         <div className="fixed inset-0 z-50 bg-[#0f172a] flex flex-col animate-in slide-in-from-bottom-10">
-            {/* Full Screen Portrait View */}
             <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
                 {hasVideo ? (
                     <video src={(selectedHero as Hero).video!.url} className="w-full h-full object-cover" autoPlay loop muted playsInline />
@@ -505,10 +604,8 @@ const AppContent = () => {
                     <div className="text-9xl animate-float">{selectedHero.image}</div>
                 ) : null}
                 
-                {/* Gradient Overlay for Text */}
                 <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none"></div>
 
-                {/* Hero Info Overlay */}
                 <div className="absolute bottom-0 left-0 right-0 p-8 pb-12">
                      <div className="flex items-center gap-2 mb-2">
                         <span className="bg-yellow-500 text-black font-black text-xs px-2 py-0.5 rounded uppercase">legendary</span>
@@ -530,7 +627,6 @@ const AppContent = () => {
                      </div>
                 </div>
 
-                {/* Close Button Top Left */}
                 <button onClick={() => setSelectedHero(null)} className="absolute top-safe-top left-4 w-10 h-10 bg-black/20 backdrop-blur rounded-full flex items-center justify-center text-white z-20">
                     <ChevronUp className="w-6 h-6 -rotate-90" />
                 </button>
@@ -566,22 +662,15 @@ const AppContent = () => {
                     onClick={() => setSelectedHero(hero)}
                     className="aspect-[3/4] rounded-2xl overflow-hidden relative shadow-md bg-slate-900 group cursor-pointer active:scale-95 transition-transform"
                  >
-                    {/* Hero Image */}
                     {hero.image.url ? (
                         <img src={hero.image.url} className="w-full h-full object-cover" />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-700 font-black text-4xl bg-slate-200">?</div>
                     )}
-                    
-                    {/* Gradient for text readability */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-
-                    {/* Level Badge Top Right */}
                     <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded shadow-sm border border-white/20">
                         LV 1
                     </div>
-
-                    {/* Bottom Info */}
                     <div className="absolute bottom-0 left-0 right-0 p-3">
                         <div className="flex gap-0.5 mb-1">
                             {[1,2,3,4,5].map(i => <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />)}
@@ -612,24 +701,31 @@ const AppContent = () => {
   return (
     <div className="flex flex-col h-screen bg-[#f0f4f8] text-slate-900 font-sans overflow-hidden select-none">
         <main className="flex-1 overflow-hidden relative">
+            <OfflineToast />
+            <MissionGuide onNavigate={(v) => setView(v as ViewState)} />
             <SaveManager 
                 onSchemaError={() => setShowDbSetup(true)} 
-                onProfileClick={() => setShowAuth(true)}
+                onProfileClick={() => setView('profile')} 
             />
-            {view === 'forge' && renderForge()}
+            {view === 'forge' && (
+                <RecruitmentCenter 
+                    importedHeroes={importedHeroes} 
+                    onHeroRecruited={handleHeroRecruited} 
+                />
+            )}
             {view === 'station' && renderStation()}
             {view === 'detail' && renderDetail()}
             {view === 'ai_lab' && <AiLab />}
             {view === 'wiki' && <div className="p-8">Wiki Hidden</div>}
             {view === 'nanoforge' && <Nanoforge />}
-            {view === 'spire' && <SpireScreen myHeroes={myHeroes} onNavigateToRecruit={() => setView('forge')} onNavigateToInventory={() => setView('nanoforge')} />}
+            {view === 'spire' && <SpireScreen myHeroes={myHeroes} onNavigateToRecruit={() => setView('forge')} />}
+            {view === 'profile' && <ProfileScreen onClose={() => setView('station')} />}
             {selectedHero && renderHeroOverlay()}
             {showDbSetup && <DbSetupModal onClose={() => setShowDbSetup(false)} />}
-            {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
         </main>
         <nav className="h-[70px] bg-white border-t border-slate-200 flex justify-around items-center px-2 shrink-0 z-30 pb-safe-bottom shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
             <NavButton viewName="station" label="Basis" icon={LayoutDashboard} />
-            <NavButton viewName="forge" label="Rekrut" icon={Search} />
+            <NavButton viewName="forge" label="Portal" icon={Zap} />
             <NavButton viewName="spire" label="Turm" icon={Tower} />
             <NavButton viewName="detail" label="Armee" icon={User} />
             <NavButton viewName="nanoforge" label="Inventar" icon={Box} />
@@ -640,11 +736,13 @@ const AppContent = () => {
 
 export const App = () => {
   return (
-    <GameProvider>
-      <InventoryProvider>
-          <AppContentWithSpire />
-      </InventoryProvider>
-    </GameProvider>
+    <AuthProvider>
+        <GameProvider>
+        <InventoryProvider>
+            <AppContentWithSpire />
+        </InventoryProvider>
+        </GameProvider>
+    </AuthProvider>
   );
 };
 
@@ -659,6 +757,10 @@ const rarityMap: Record<string, ItemRarity> = {
 const AppContentWithSpire = () => {
     const { addItem } = useInventory();
     
+    useEffect(() => {
+        // Initial setup hook
+    }, []);
+
     return (
         <SpireProvider unlockedHeroes={[]} onAddItem={(item) => {
             addItem({
@@ -670,7 +772,9 @@ const AppContentWithSpire = () => {
                 description: item.description
             }, item.quantity);
         }}>
-            <AppContent />
+            <MissionProvider>
+                <AppContent />
+            </MissionProvider>
         </SpireProvider>
     );
 };

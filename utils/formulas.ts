@@ -13,9 +13,18 @@ const BASE_COSTS: Record<BuildingType, Partial<Resources>> = {
   [BuildingType.CREDIT_TERMINAL]: { nanosteel: 100 },
   [BuildingType.BARRACKS]: { nanosteel: 200, biomass: 200 },
   [BuildingType.MED_BAY]: { nanosteel: 150, biomass: 100 },
-  [BuildingType.RADAR]: { nanosteel: 300, credits: 300 },
+  [BuildingType.RADAR_STATION]: { nanosteel: 300, credits: 300 },
   [BuildingType.TECH_LAB]: { nanosteel: 500, credits: 1000 },
   [BuildingType.ALLIANCE_HUB]: { nanosteel: 1000, credits: 1000 },
+  
+  // Storage
+  [BuildingType.NANO_VAULT]: { credits: 200, nanosteel: 100 },
+  [BuildingType.BIO_SILO]: { credits: 200, nanosteel: 100 },
+  
+  // Factories
+  [BuildingType.TERRA_FACTORY]: { nanosteel: 500, credits: 200 },
+  [BuildingType.AERO_DOCK]: { nanosteel: 400, credits: 300 },
+  [BuildingType.CYBER_UPLINK]: { nanosteel: 300, credits: 400 },
 };
 
 // Base Production per Hour (Level 1)
@@ -23,14 +32,24 @@ const BASE_PRODUCTION: Record<BuildingType, Partial<Resources>> = {
   [BuildingType.HYDROPONICS]: { biomass: 600 },
   [BuildingType.NANO_FOUNDRY]: { nanosteel: 300 },
   [BuildingType.CREDIT_TERMINAL]: { credits: 150 },
+  
   // Non-production buildings return empty
   [BuildingType.COMMAND_CENTER]: {},
   [BuildingType.SHIELD_GENERATOR]: {},
   [BuildingType.BARRACKS]: {},
   [BuildingType.MED_BAY]: {},
-  [BuildingType.RADAR]: {},
+  [BuildingType.RADAR_STATION]: {},
   [BuildingType.TECH_LAB]: {},
   [BuildingType.ALLIANCE_HUB]: {},
+  
+  // Storage
+  [BuildingType.NANO_VAULT]: {},
+  [BuildingType.BIO_SILO]: {},
+  
+  // Factories
+  [BuildingType.TERRA_FACTORY]: {},
+  [BuildingType.AERO_DOCK]: {},
+  [BuildingType.CYBER_UPLINK]: {},
 };
 
 // Base Build Time in Seconds (Level 1)
@@ -48,7 +67,6 @@ export const calculateBuildingCost = (type: BuildingType, currentLevel: number):
     biomass: Math.floor((base.biomass || 0) * multiplier),
     nanosteel: Math.floor((base.nanosteel || 0) * multiplier),
     gems: 0,
-    dark_matter: Math.floor((base.dark_matter || 0) * multiplier),
   };
 };
 

@@ -8,51 +8,23 @@ interface LockOnBarProps {
 
 export function LockOnBar({ onFire, difficulty = 1, disabled = false }: LockOnBarProps) {
   const [cursorPosition, setCursorPosition] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = right, -1 = left
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<'hit' | 'miss' | null>(null);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
   // Difficulty Config
-  // Sweet spot gets smaller with difficulty
-  const sweetSpotSize = Math.max(10, 30 - difficulty * 2); 
+  // Sweet spot gets smaller with difficulty (min 10%)
+  const sweetSpotSize = Math.max(10, 30 - difficulty * 1.5); 
   const sweetSpotStart = 50 - sweetSpotSize / 2;
   const sweetSpotEnd = 50 + sweetSpotSize / 2;
 
-  // Speed Logic: Much faster base speed + scaling
-  // Base speed 0.15 means ~600ms to cross. 
-  // Difficulty 10 -> Speed 0.45 means ~200ms to cross (Very fast!)
-  const speed = 0.15 + (difficulty * 0.03);
+  // Speed Logic: Base speed + scaling
+  // Speed is units per ms. 0.1 means 100 units in 1000ms (1s).
+  const speed = 0.08 + (difficulty * 0.015);
 
-  const animate = useCallback((timestamp: number) => {
-    if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-    const delta = timestamp - lastTimeRef.current;
-    lastTimeRef.current = timestamp;
-
-    setCursorPosition(prev => {
-      // Calculate movement based on time delta to stay framerate independent
-      // Multiplier 0.1 adjusts the delta to percentage points
-      let moveAmount = speed * delta * 0.1;
-      
-      // Since we can't easily access the current 'direction' state inside this callback 
-      // without adding it to dependencies (which resets animation), 
-      // we use a ref or a functional update approach that calculates direction on the fly
-      // OR simpler: we rely on the closure variable 'direction' being updated by the state effect?
-      // No, that's tricky. Let's use a mutable ref for direction to keep the loop tight.
-      return prev; 
-    });
-    
-    // We handle the update logic inside a separate effect or ref-based loop for better performance
-    // But for React simplicity, let's use the ref approach for direction:
-    
-    // Trigger next frame
-    animationRef.current = requestAnimationFrame(animate);
-  }, [speed]);
-
-  // Use a ref for direction to avoid closure staleness in the animation loop
   const directionRef = useRef(1);
-  const positionRef = useRef(0); // Use ref for position to calculate physics, then sync to state for render
+  const positionRef = useRef(0);
 
   const runLoop = useCallback((timestamp: number) => {
     if (!lastTimeRef.current) lastTimeRef.current = timestamp;
@@ -60,7 +32,7 @@ export function LockOnBar({ onFire, difficulty = 1, disabled = false }: LockOnBa
     lastTimeRef.current = timestamp;
 
     // Calculate new position
-    const move = directionRef.current * speed * delta * 0.1;
+    const move = directionRef.current * speed * delta;
     let newPos = positionRef.current + move;
 
     // Bounce Logic (Ping Pong)
@@ -110,8 +82,6 @@ export function LockOnBar({ onFire, difficulty = 1, disabled = false }: LockOnBa
     setTimeout(() => {
       onFire(isCritical);
       setResult(null);
-      // Don't reset cursor position immediately, let player see where they stopped
-      // But for next run, it will continue from there or random
     }, 600);
   }, [isRunning, sweetSpotStart, sweetSpotEnd, stopAnimation, onFire, disabled]);
 
@@ -172,7 +142,7 @@ export function LockOnBar({ onFire, difficulty = 1, disabled = false }: LockOnBa
 
         {/* Difficulty Indicator */}
         <div className="absolute top-1 right-2 text-[8px] font-mono text-slate-500 z-0">
-           SPD: {(speed * 10).toFixed(1)}x
+           DIFFICULTY: {difficulty}
         </div>
       </div>
 

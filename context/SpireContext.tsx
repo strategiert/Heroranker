@@ -151,19 +151,12 @@ export const ITEM_DATABASE: Record<string, Omit<Item, 'quantity'>> = {
     rarity: 'legendary',
     description: 'Core component from an ancient machine. Priceless.',
   },
-  repair_kit: {
-    id: 'repair_kit',
-    name: 'Repair Kit',
-    icon: '🔧',
-    rarity: 'uncommon',
-    description: 'Restores HP when used.',
-  },
-  power_boost: {
-    id: 'power_boost',
-    name: 'Power Boost',
-    icon: '⚡',
+  recruit_ticket: {
+    id: 'recruit_ticket',
+    name: 'Recruit Ticket',
+    icon: '🎫',
     rarity: 'rare',
-    description: 'Temporarily increases attack power.',
+    description: 'Used to summon new heroes.',
   },
 };
 
@@ -189,9 +182,10 @@ export function generateEnemy(floor: number): Enemy {
   const eligibleTemplates = ENEMY_TEMPLATES.filter(t => t.baseLevel <= floor);
   const template = eligibleTemplates[Math.floor(Math.random() * eligibleTemplates.length)] || ENEMY_TEMPLATES[0];
   
-  // Scale stats with floor
+  // Scale stats with floor (Exponential Curve)
   const level = floor;
-  const scaleFactor = 1 + (floor * 0.15);
+  const scaleFactor = Math.pow(1.05, floor); // 5% harder per floor
+  
   const baseHp = 100;
   const baseAttack = 15;
   const baseDefense = 5;
@@ -199,14 +193,17 @@ export function generateEnemy(floor: number): Enemy {
   const lootTable: LootDrop[] = [
     { itemId: 'scrap_metal', name: 'Scrap Metal', icon: '🔩', rarity: 'common', quantity: Math.floor(1 + floor * 0.5), dropChance: 80 },
     { itemId: 'credits', name: 'Credits', icon: '💰', rarity: 'common', quantity: Math.floor(10 + floor * 5), dropChance: 100 },
-    { itemId: 'energy_cell', name: 'Energy Cell', icon: '🔋', rarity: 'uncommon', quantity: 1, dropChance: 30 + floor },
-    { itemId: 'rare_alloy', name: 'Rare Alloy', icon: '💎', rarity: 'rare', quantity: 1, dropChance: Math.min(5 + floor * 0.5, 25) },
-    { itemId: 'void_shard', name: 'Void Shard', icon: '🔮', rarity: 'epic', quantity: 1, dropChance: Math.min(floor * 0.3, 10) },
+    { itemId: 'energy_cell', name: 'Energy Cell', icon: '🔋', rarity: 'uncommon', quantity: 1, dropChance: 20 },
+    { itemId: 'rare_alloy', name: 'Rare Alloy', icon: '💎', rarity: 'rare', quantity: 1, dropChance: 5 },
   ];
   
   // Boss floors (every 10)
   if (floor % 10 === 0) {
     lootTable.push({ itemId: 'ancient_core', name: 'Ancient Core', icon: '⚙️', rarity: 'legendary', quantity: 1, dropChance: 50 });
+    lootTable.push({ itemId: 'recruit_ticket', name: 'Recruit Ticket', icon: '🎫', rarity: 'rare', quantity: 1, dropChance: 100 });
+  } else {
+      // Small chance for tickets on normal floors
+      lootTable.push({ itemId: 'recruit_ticket', name: 'Recruit Ticket', icon: '🎫', rarity: 'rare', quantity: 1, dropChance: 2 });
   }
   
   return {
@@ -215,9 +212,9 @@ export function generateEnemy(floor: number): Enemy {
     image: template.image,
     faction: template.faction,
     level,
-    power: Math.floor(50 + floor * 25),
-    maxHp: Math.floor(baseHp * scaleFactor),
-    currentHp: Math.floor(baseHp * scaleFactor),
+    power: Math.floor(50 * scaleFactor),
+    maxHp: Math.floor(baseHp * scaleFactor * (floor % 10 === 0 ? 2.5 : 1)), // Bosses have 2.5x HP
+    currentHp: Math.floor(baseHp * scaleFactor * (floor % 10 === 0 ? 2.5 : 1)),
     attack: Math.floor(baseAttack * scaleFactor),
     defense: Math.floor(baseDefense * scaleFactor),
     lootTable,
@@ -266,7 +263,7 @@ interface SpireContextType extends SpireState {
   resetSpire: () => void;
   
   // Loot
-  collectLoot: () => void;
+  collectLoot: () => Item[];
   
   // UI
   triggerScreenShake: () => void;
@@ -277,7 +274,7 @@ interface SpireContextType extends SpireState {
   hasCounterBonus: () => boolean;
   
   // Sync
-  loadSpireState: (newState: Partial<SpireState>) => void; // New function
+  loadSpireState: (newState: Partial<SpireState>) => void;
 }
 
 const SpireContext = createContext<SpireContextType | null>(null);
@@ -321,12 +318,10 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
   const loadSpireState = (newState: Partial<SpireState>) => {
       if (newState) {
           console.log("Loading Cloud Save for Spire...");
-          // Only load persistent parts (floor, highscore), not active combat state usually
           setState(prev => ({
               ...prev,
               currentFloor: newState.currentFloor || 1,
               highScore: newState.highScore || prev.highScore,
-              // If we are mid-combat in the save, we could load it, but let's reset to lobby for simplicity
               selectedHero: null,
               currentEnemy: generateEnemy(newState.currentFloor || 1),
               playerHp: 100,
@@ -335,7 +330,6 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
       }
   };
 
-  // Get counter faction for enemy
   const getCounterFaction = useCallback((enemyFaction: Faction): Faction => {
     const entry = Object.entries(FACTION_EFFECTIVENESS).find(
       ([_, value]) => value.strongAgainst === enemyFaction
@@ -343,13 +337,11 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     return entry ? (entry[0] as Faction) : 'Neutral';
   }, []);
 
-  // Check if selected hero has counter bonus
   const hasCounterBonus = useCallback((): boolean => {
     if (!state.selectedHero || !state.currentEnemy) return false;
     return FACTION_EFFECTIVENESS[state.selectedHero.faction]?.strongAgainst === state.currentEnemy.faction;
   }, [state.selectedHero, state.currentEnemy]);
 
-  // Select Hero
   const selectHero = useCallback((hero: SpireHero) => {
     setState(prev => ({
       ...prev,
@@ -368,7 +360,6 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }));
   }, []);
 
-  // Start Combat
   const startCombat = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -376,7 +367,6 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }));
   }, []);
 
-  // Add Combat Log
   const addCombatLog = useCallback((log: Omit<CombatLog, 'id' | 'timestamp'>) => {
     const newLog: CombatLog = {
       ...log,
@@ -389,7 +379,6 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }));
   }, []);
 
-  // Trigger Screen Shake
   const triggerScreenShake = useCallback(() => {
     setState(prev => ({ ...prev, screenShake: true }));
     setTimeout(() => {
@@ -397,19 +386,19 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }, 300);
   }, []);
 
-  // Perform Attack
   const performAttack = useCallback((isCritical: boolean) => {
     if (!state.selectedHero || !state.currentEnemy) return;
 
     const hasBonus = hasCounterBonus();
     const baseDamage = state.selectedHero.attack;
-    const critMultiplier = isCritical ? 2 : 0.5;
-    const counterMultiplier = hasBonus ? 1.2 : 1;
+    const critMultiplier = isCritical ? 1.5 : 0.5; // Skill factor
+    const counterMultiplier = hasBonus ? 1.25 : 1; // Faction Bonus
     const defense = state.currentEnemy.defense;
     
-    const finalDamage = Math.floor(
-      (baseDamage * critMultiplier * counterMultiplier) * (1 - defense / 200)
-    );
+    // Damage Formula
+    const damageRaw = (baseDamage * critMultiplier * counterMultiplier);
+    const mitigation = defense > 0 ? (100 / (100 + defense)) : 1;
+    const finalDamage = Math.max(1, Math.floor(damageRaw * mitigation));
     
     const newEnemyHp = Math.max(0, state.currentEnemy.currentHp - finalDamage);
     
@@ -417,8 +406,8 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     addCombatLog({
       type: isCritical ? 'critical' : 'attack',
       message: isCritical 
-        ? `💥 CRITICAL HIT! ${state.selectedHero.name} deals ${finalDamage} damage!`
-        : `⚔️ ${state.selectedHero.name} attacks for ${finalDamage} damage.`,
+        ? `💥 CRITICAL! ${state.selectedHero.name} hits for ${finalDamage}!`
+        : `⚔️ ${state.selectedHero.name} hits for ${finalDamage}.`,
       damage: finalDamage,
     });
 
@@ -444,10 +433,12 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
       return;
     }
 
-    // Enemy counter-attack
-    const enemyDamage = Math.floor(
-      state.currentEnemy.attack * (0.8 + Math.random() * 0.4) * (1 - state.selectedHero.defense / 200)
-    );
+    // Enemy counter-attack (Turn Based)
+    // Enemy damage = Attack +/- 20%
+    const variance = 0.8 + Math.random() * 0.4;
+    const enemyMitigation = state.selectedHero.defense > 0 ? (100 / (100 + state.selectedHero.defense)) : 1;
+    const enemyDamage = Math.max(1, Math.floor(state.currentEnemy.attack * variance * enemyMitigation));
+    
     const newPlayerHp = Math.max(0, state.playerHp - enemyDamage);
 
     setState(prev => ({
@@ -459,44 +450,41 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
 
     addCombatLog({
       type: 'enemy_attack',
-      message: `👊 ${state.currentEnemy.name} counter-attacks for ${enemyDamage} damage!`,
+      message: `👊 ${state.currentEnemy.name} hits back for ${enemyDamage}!`,
       damage: enemyDamage,
     });
 
-    // Check defeat
     if (newPlayerHp <= 0) {
       addCombatLog({
         type: 'defeat',
         message: `💀 Defeat! ${state.selectedHero.name} has fallen...`,
       });
-      // Could trigger game over screen here
     }
   }, [state, hasCounterBonus, addCombatLog, triggerScreenShake]);
 
-  // Perform Heal
   const performHeal = useCallback(() => {
     if (state.healCooldown > 0 || state.energy < 30) return;
     
-    const healAmount = Math.floor(state.playerMaxHp * 0.3);
+    const healAmount = Math.floor(state.playerMaxHp * 0.35);
     const newHp = Math.min(state.playerMaxHp, state.playerHp + healAmount);
     
     setState(prev => ({
       ...prev,
       playerHp: newHp,
       energy: prev.energy - 30,
-      healCooldown: 3,
+      healCooldown: 3, // Cooldown in turns
     }));
 
     addCombatLog({
       type: 'heal',
-      message: `💚 Repaired for ${healAmount} HP!`,
+      message: `💚 Repaired systems for ${healAmount} HP!`,
     });
 
-    // Enemy still attacks
+    // Enemy still attacks after heal
     if (state.currentEnemy && state.selectedHero) {
-      const enemyDamage = Math.floor(
-        state.currentEnemy.attack * (0.8 + Math.random() * 0.4) * (1 - state.selectedHero.defense / 200)
-      );
+      const variance = 0.8 + Math.random() * 0.4;
+      const enemyMitigation = state.selectedHero.defense > 0 ? (100 / (100 + state.selectedHero.defense)) : 1;
+      const enemyDamage = Math.max(1, Math.floor(state.currentEnemy.attack * variance * enemyMitigation));
       
       setTimeout(() => {
         setState(prev => ({
@@ -505,14 +493,13 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
         }));
         addCombatLog({
           type: 'enemy_attack',
-          message: `👊 ${state.currentEnemy!.name} attacks for ${enemyDamage} damage!`,
+          message: `👊 ${state.currentEnemy!.name} interrupts for ${enemyDamage}!`,
           damage: enemyDamage,
         });
-      }, 500);
+      }, 400);
     }
   }, [state, addCombatLog]);
 
-  // Next Floor
   const nextFloor = useCallback(() => {
     const newFloor = state.currentFloor + 1;
     setState(prev => ({
@@ -526,14 +513,14 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }));
   }, [state.currentFloor]);
 
-  // Collect Loot
   const collectLoot = useCallback(() => {
+    const loot = [...state.pendingLoot];
     state.pendingLoot.forEach(item => {
       onAddItem(item);
     });
+    return loot;
   }, [state.pendingLoot, onAddItem]);
 
-  // Reset Spire
   const resetSpire = useCallback(() => {
     setState(prev => ({
       ...prev,

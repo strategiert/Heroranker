@@ -1,40 +1,85 @@
-export type ResourceType = 'credits' | 'biomass' | 'nanosteel' | 'gems' | 'dark_matter';
+export type ResourceType = 'credits' | 'biomass' | 'nanosteel' | 'gems';
 
 export interface Resources {
   credits: number;
   biomass: number;
   nanosteel: number;
   gems: number;
-  dark_matter: number;
 }
 
 export enum BuildingType {
+  // HQ
   COMMAND_CENTER = 'COMMAND_CENTER',
-  HYDROPONICS = 'HYDROPONICS',
+  
+  // PRODUCTION
   NANO_FOUNDRY = 'NANO_FOUNDRY',
+  HYDROPONICS = 'HYDROPONICS',
   CREDIT_TERMINAL = 'CREDIT_TERMINAL',
+  
+  // STORAGE
+  NANO_VAULT = 'NANO_VAULT',
+  BIO_SILO = 'BIO_SILO',
+  
+  // MILITARY
   BARRACKS = 'BARRACKS',
   MED_BAY = 'MED_BAY',
-  RADAR = 'RADAR',
-  TECH_LAB = 'TECH_LAB',
   SHIELD_GENERATOR = 'SHIELD_GENERATOR',
+  
+  // FACTORIES
+  TERRA_FACTORY = 'TERRA_FACTORY',
+  AERO_DOCK = 'AERO_DOCK',
+  CYBER_UPLINK = 'CYBER_UPLINK',
+  
+  // UTILITY & RESEARCH
+  RADAR_STATION = 'RADAR_STATION',
+  TECH_LAB = 'TECH_LAB',
   ALLIANCE_HUB = 'ALLIANCE_HUB'
 }
 
-export type BuildingStatus = 'IDLE' | 'UPGRADING' | 'BUILDING';
+export type BuildingCategory = 
+  | 'HQ' 
+  | 'PRODUCTION' 
+  | 'STORAGE' 
+  | 'MILITARY' 
+  | 'DEFENSE' 
+  | 'UTILITY' 
+  | 'RESEARCH';
+
+export type BuildingStatus = 'IDLE' | 'UPGRADING';
 
 export interface BuildingState {
-  id: string;
+  id: string; // Unique Instance ID (e.g. "hydro_1")
   type: BuildingType;
   level: number;
   status: BuildingStatus;
-  finishTime?: number; // Timestamp in ms
-  lastCollectionTime?: number; // Timestamp in ms for passive production
+  finishTime?: number; // Timestamp in ms when upgrade finishes
+  activeSkin?: string; // ID of the equipped skin
+}
+
+export interface BuildingDefinition {
+  id: string;
+  name: string;
+  description: string;
+  type: BuildingCategory;
+  maxLevel: number;
+  baseCost: Partial<Record<ResourceType, number>>;
+  costGrowth: number;
+  baseTime: number; // in seconds
+  timeGrowth: number;
+  baseProduction?: number; // Amount per hour at lvl 1
+  prodGrowth?: number;
+  resource?: ResourceType; // Which resource it produces
+  baseCapacity?: number;
+  capGrowth?: number;
+  storageResource?: ResourceType;
+  unitType?: 'terraguard' | 'aero' | 'cyber';
+  statBonus?: string;
+  maxCount?: number; // Optional limit
 }
 
 export interface TroopState {
   count: number;
-  tier: number; // 1-10
+  tier: number;
   wounded: number;
 }
 
@@ -44,26 +89,14 @@ export interface GameState {
   troops: TroopState;
   builderDroids: number;
   lastSaveTime: number;
+  totalHeroes: number;
+  unlockedSkins: string[]; // List of purchased skin IDs
 }
 
+// START RESOURCES
 export const INITIAL_RESOURCES: Resources = {
-  credits: 1000,
-  biomass: 1000,
-  nanosteel: 500,
-  gems: 50,
-  dark_matter: 0
-};
-
-// Configuration for building limits and requirements
-export const BUILDING_LIMITS: Record<BuildingType, number> = {
-  [BuildingType.COMMAND_CENTER]: 1,
-  [BuildingType.SHIELD_GENERATOR]: 1,
-  [BuildingType.HYDROPONICS]: 5,
-  [BuildingType.NANO_FOUNDRY]: 5,
-  [BuildingType.CREDIT_TERMINAL]: 5,
-  [BuildingType.BARRACKS]: 4,
-  [BuildingType.MED_BAY]: 4,
-  [BuildingType.RADAR]: 1,
-  [BuildingType.TECH_LAB]: 1,
-  [BuildingType.ALLIANCE_HUB]: 1,
+  credits: 5000,
+  biomass: 5000,
+  nanosteel: 2500,
+  gems: 100
 };

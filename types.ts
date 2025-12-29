@@ -1,5 +1,3 @@
-
-
 export interface PowerStats {
   intelligence: number;
   strength: number;
@@ -120,4 +118,4 @@ export interface CombatLog {
   isCrit: boolean;
 }
 
-export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab' | 'spire' | 'nanoforge';
+export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab' | 'spire' | 'nanoforge' | 'profile';
