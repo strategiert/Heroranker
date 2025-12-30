@@ -1,15 +1,27 @@
+
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Resources, GameState, INITIAL_RESOURCES, BuildingType, BuildingStatus, BuildingState, BuildingDefinition } from '../types/economy';
-import { calculateCost, calculateBuildTime, calculateProduction, calculateOfflineProduction } from '../utils/engine';
+import { Hero, HeroSpecialty } from '../types';
+import { 
+    calculateCost, 
+    calculateBuildTime, 
+    calculateProduction, 
+    calculateOfflineProduction, 
+    calculateStorageCap,
+    calculateXpGain,
+    processHeroLevelUp
+} from '../utils/engine';
 import { BUILDING_DEFINITIONS } from '../data/buildings';
 import { SKIN_DATABASE } from '../data/skins';
+import { STATION_MAP_CONFIG } from '../data/mapConfig';
 
 interface GameContextType {
   state: GameState;
+  storageCaps: Resources;
   offlineGains: { resources: Resources, seconds: number } | null;
   clearOfflineGains: () => void;
   startUpgrade: (buildingId: string) => void;
-  constructBuilding: (type: BuildingType) => void;
+  constructBuilding: (type: BuildingType, slotId: string) => void;
   speedUpBuilding: (buildingId: string, seconds: number) => void;
   deductResources: (cost: Partial<Resources>) => boolean;
   addResources: (amount: Partial<Resources>) => void;
@@ -18,6 +30,10 @@ interface GameContextType {
   loadState: (newState: GameState) => void;
   unlockSkin: (skinId: string) => boolean;
   equipSkin: (buildingId: string, skinId: string) => void;
+  
+  // Hero Management
+  assignHero: (heroId: string, buildingId: string | null) => void;
+  addHero: (hero: Hero) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -33,6 +49,7 @@ const reconcileState = (savedState: GameState): GameState => {
     if (typeof newState.totalHeroes === 'undefined') newState.totalHeroes = 0;
     if (typeof newState.builderDroids === 'undefined' || newState.builderDroids < 2) newState.builderDroids = 2;
     if (!Array.isArray(newState.unlockedSkins)) newState.unlockedSkins = ['default'];
+    if (!Array.isArray(newState.heroes)) newState.heroes = []; // Initialize heroes array
 
     // 3. Filter out invalid/corrupted buildings
     if (Array.isArray(newState.buildings)) {
@@ -43,16 +60,48 @@ const reconcileState = (savedState: GameState): GameState => {
         newState.buildings = [];
     }
 
-    // 4. Ensure Core Buildings exist
+    // 4. MIGRATION: Assign missing slots for old saves
+    const availableSlots = [...STATION_MAP_CONFIG.map.slots];
+    newState.buildings.forEach(b => {
+        if (!b.slotId) {
+            // Find a slot that fits the building type
+            const slotIndex = availableSlots.findIndex(s => {
+               // Only use this slot if it's not already taken by another building in this loop
+               const isTaken = newState.buildings.some(other => other.slotId === s.id);
+               if (isTaken) return false;
+               
+               if (b.type === 'COMMAND_CENTER' && s.id === 'slot_center_core') return true;
+               if (s.allowed && s.allowed.includes(b.type)) return true;
+               // Fallback: if allowed array exists but type not in it, skip. If undefined, assume open? No, strict.
+               return false;
+            });
+
+            if (slotIndex >= 0) {
+                b.slotId = availableSlots[slotIndex].id;
+                console.log(`Migrated ${b.type} to ${b.slotId}`);
+            } else {
+                // Last resort fallback
+                b.slotId = `temp_slot_${Math.random()}`; 
+            }
+        }
+    });
+
+    // 5. MIGRATION: Assign specialties to heroes if missing
+    newState.heroes.forEach(h => {
+        if (!h.specialty) {
+            // Simple logic: High INT = PROD, High STR = MILITARY, else RESEARCH/PROD
+            if (h.powerstats.intelligence > 70) h.specialty = 'PROD';
+            else if (h.powerstats.strength > 70) h.specialty = 'MILITARY';
+            else h.specialty = Math.random() > 0.5 ? 'PROD' : 'MILITARY';
+        }
+    });
+
+    // 6. Ensure Core Buildings exist
     const coreBuildings: BuildingState[] = [
-        { id: 'hq_1', type: BuildingType.COMMAND_CENTER, level: 1, status: 'IDLE' },
-        { id: 'hydro_1', type: BuildingType.HYDROPONICS, level: 1, status: 'IDLE' },
-        { id: 'foundry_1', type: BuildingType.NANO_FOUNDRY, level: 1, status: 'IDLE' },
-        { id: 'credit_1', type: BuildingType.CREDIT_TERMINAL, level: 1, status: 'IDLE' },
+        { id: 'hq_1', type: BuildingType.COMMAND_CENTER, level: 1, status: 'IDLE', slotId: 'slot_center_core' },
     ];
 
     coreBuildings.forEach(core => {
-        // Check if a building of this type exists
         const exists = newState.buildings.some(b => b.type === core.type);
         if (!exists) {
             console.log(`[Repair] Restoring missing building: ${core.type}`);
@@ -81,11 +130,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       builderDroids: 2,
       lastSaveTime: Date.now(),
       totalHeroes: 0,
+      heroes: [],
       unlockedSkins: ['default']
     });
   });
 
   const [offlineGains, setOfflineGains] = useState<{ resources: Resources, seconds: number } | null>(null);
+  
+  // Calculate dynamic storage caps based on buildings
+  const storageCaps = calculateStorageCap(state.buildings);
 
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -97,16 +150,19 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (result.seconds > 60 && (result.resources.credits > 0 || result.resources.biomass > 0 || result.resources.nanosteel > 0)) {
         setOfflineGains(result);
         
-        setState(prev => ({
-            ...prev,
-            resources: {
-                credits: prev.resources.credits + result.resources.credits,
-                biomass: prev.resources.biomass + result.resources.biomass,
-                nanosteel: prev.resources.nanosteel + result.resources.nanosteel,
-                gems: prev.resources.gems
-            },
-            lastSaveTime: Date.now()
-        }));
+        setState(prev => {
+            const caps = calculateStorageCap(prev.buildings);
+            return {
+                ...prev,
+                resources: {
+                    credits: Math.min(caps.credits, prev.resources.credits + result.resources.credits),
+                    biomass: Math.min(caps.biomass, prev.resources.biomass + result.resources.biomass),
+                    nanosteel: Math.min(caps.nanosteel, prev.resources.nanosteel + result.resources.nanosteel),
+                    gems: prev.resources.gems
+                },
+                lastSaveTime: Date.now()
+            };
+        });
     }
   }, []);
 
@@ -119,13 +175,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let hasChanges = false;
         const newBuildings = [...prev.buildings];
         const newResources = { ...prev.resources };
+        let newHeroes = [...prev.heroes];
 
         // A. Handle Building Upgrades
         newBuildings.forEach((b, idx) => {
           if (b.status === 'UPGRADING' && b.finishTime && now >= b.finishTime) {
             hasChanges = true;
-            // Finish upgrade: Level 0 (construction) becomes Level 1
-            // Normal upgrade: Level N becomes Level N+1
             const newLevel = b.level === 0 ? 1 : b.level + 1;
             
             newBuildings[idx] = {
@@ -137,7 +192,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         });
 
-        // B. Handle Passive Production (1 second worth)
+        // B. Handle Passive Production (with Caps)
+        const caps = calculateStorageCap(newBuildings);
         let prodCredits = 0;
         let prodBiomass = 0;
         let prodNanosteel = 0;
@@ -146,8 +202,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (b.status === 'IDLE' && b.level > 0) {
                 const def = BUILDING_DEFINITIONS[b.type];
                 if (def && def.baseProduction) {
-                    const prod = calculateProduction(def, b.level);
-                    // Add per-second amount (prod is per hour)
+                    // Find assigned hero for this building
+                    const assignedHero = newHeroes.find(h => h.assignedBuildingId === b.id);
+                    
+                    const prod = calculateProduction(def, b.level, assignedHero);
+                    
+                    // Add per-second amount
                     prodCredits += prod.credits / 3600;
                     prodBiomass += prod.biomass / 3600;
                     prodNanosteel += prod.nanosteel / 3600;
@@ -156,15 +216,34 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (prodCredits > 0 || prodBiomass > 0 || prodNanosteel > 0) {
-            newResources.credits += prodCredits;
-            newResources.biomass += prodBiomass;
-            newResources.nanosteel += prodNanosteel;
+            newResources.credits = Math.min(caps.credits, newResources.credits + prodCredits);
+            newResources.biomass = Math.min(caps.biomass, newResources.biomass + prodBiomass);
+            newResources.nanosteel = Math.min(caps.nanosteel, newResources.nanosteel + prodNanosteel);
         }
+
+        // C. Handle Hero Training
+        newHeroes = newHeroes.map(h => {
+            if (h.assignedBuildingId) {
+                const building = newBuildings.find(b => b.id === h.assignedBuildingId);
+                // Hero gains XP if building exists, is built (level > 0), and is IDLE (not upgrading)
+                if (building && building.level > 0 && building.status === 'IDLE') {
+                    const xpGain = calculateXpGain(building);
+                    const heroWithXp = { ...h, currentXp: h.currentXp + xpGain };
+                    // Check Level Up
+                    return processHeroLevelUp(heroWithXp);
+                } else if (!building) {
+                    // Building gone? Unassign
+                    return { ...h, assignedBuildingId: null };
+                }
+            }
+            return h;
+        });
 
         return { 
             ...prev, 
             buildings: newBuildings,
             resources: newResources,
+            heroes: newHeroes,
             lastSaveTime: now 
         };
       });
@@ -191,7 +270,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearOfflineGains = () => setOfflineGains(null);
 
-  const constructBuilding = (type: BuildingType) => {
+  const constructBuilding = (type: BuildingType, slotId: string) => {
       setState(prev => {
           const def = BUILDING_DEFINITIONS[type];
           if (!def) return prev;
@@ -204,7 +283,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const activeBuilders = prev.buildings.filter(b => b.status === 'UPGRADING').length;
           if (activeBuilders >= prev.builderDroids) return prev;
 
-          // Calculate Cost (Level 0 -> 1 is Base Cost)
+          // Calculate Cost
           const cost = calculateCost(def, 0); 
           const time = calculateBuildTime(def, 0);
 
@@ -225,10 +304,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const newBuilding: BuildingState = {
               id: `${type}_${crypto.randomUUID().slice(0,4)}`,
               type: type,
-              level: 0, // 0 means under construction
+              level: 0,
               status: 'UPGRADING',
               finishTime: Date.now() + (time * 1000),
-              activeSkin: 'default'
+              activeSkin: 'default',
+              slotId: slotId // Assign slot
           };
 
           return {
@@ -317,15 +397,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addResources = (amount: Partial<Resources>) => {
-      setState(prev => ({
-          ...prev,
-          resources: {
-              credits: prev.resources.credits + (amount.credits || 0),
-              nanosteel: prev.resources.nanosteel + (amount.nanosteel || 0),
-              biomass: prev.resources.biomass + (amount.biomass || 0),
-              gems: prev.resources.gems + (amount.gems || 0),
-          }
-      }));
+      setState(prev => {
+          const caps = calculateStorageCap(prev.buildings);
+          return {
+              ...prev,
+              resources: {
+                  credits: Math.min(caps.credits, prev.resources.credits + (amount.credits || 0)),
+                  nanosteel: Math.min(caps.nanosteel, prev.resources.nanosteel + (amount.nanosteel || 0)),
+                  biomass: Math.min(caps.biomass, prev.resources.biomass + (amount.biomass || 0)),
+                  gems: prev.resources.gems + (amount.gems || 0), // Gems usually uncapped
+              }
+          };
+      });
   };
 
   const incrementHeroCount = () => {
@@ -333,15 +416,58 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const debugAddResources = () => {
-    setState(prev => ({
-      ...prev,
-      resources: {
-        credits: prev.resources.credits + 10000,
-        nanosteel: prev.resources.nanosteel + 5000,
-        biomass: prev.resources.biomass + 5000,
-        gems: prev.resources.gems + 100
+    addResources({
+        credits: 10000,
+        nanosteel: 5000,
+        biomass: 5000,
+        gems: 100
+    });
+  };
+
+  // --- HEROES ---
+
+  const addHero = (hero: Hero) => {
+      // Ensure new hero has a specialty
+      const h = { ...hero };
+      if (!h.specialty) {
+          if (h.powerstats.intelligence > 70) h.specialty = 'PROD';
+          else if (h.powerstats.strength > 70) h.specialty = 'MILITARY';
+          else h.specialty = Math.random() > 0.5 ? 'PROD' : 'MILITARY';
       }
-    }));
+
+      setState(prev => ({
+          ...prev,
+          heroes: [...prev.heroes, h],
+          totalHeroes: (prev.totalHeroes || 0) + 1
+      }));
+  };
+
+  const assignHero = (heroId: string, buildingId: string | null) => {
+      setState(prev => {
+          // If buildingId is not null, unassign this hero from any previous building
+          // Also, if another hero was assigned to this building, unassign them first (game logic choice: replace or fail? let's replace)
+          
+          let newHeroes = [...prev.heroes];
+          
+          // 1. Unassign target hero from anywhere
+          newHeroes = newHeroes.map(h => 
+              h.id === heroId ? { ...h, assignedBuildingId: null } : h
+          );
+
+          // 2. If assigning to a building, unassign anyone else currently there
+          if (buildingId) {
+              newHeroes = newHeroes.map(h => 
+                  h.assignedBuildingId === buildingId ? { ...h, assignedBuildingId: null } : h
+              );
+          }
+
+          // 3. Assign
+          newHeroes = newHeroes.map(h => 
+              h.id === heroId ? { ...h, assignedBuildingId: buildingId } : h
+          );
+
+          return { ...prev, heroes: newHeroes };
+      });
   };
 
   // --- SKINS ---
@@ -373,6 +499,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <GameContext.Provider value={{ 
         state, 
+        storageCaps,
         offlineGains, 
         clearOfflineGains,
         startUpgrade, 
@@ -384,7 +511,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         debugAddResources, 
         loadState,
         unlockSkin,
-        equipSkin
+        equipSkin,
+        assignHero,
+        addHero
     }}>
       {children}
     </GameContext.Provider>

@@ -1,3 +1,4 @@
+
 import { BuildingType, Resources } from '../types/economy';
 
 // Base Configuration
@@ -25,6 +26,13 @@ const BASE_COSTS: Record<BuildingType, Partial<Resources>> = {
   [BuildingType.TERRA_FACTORY]: { nanosteel: 500, credits: 200 },
   [BuildingType.AERO_DOCK]: { nanosteel: 400, credits: 300 },
   [BuildingType.CYBER_UPLINK]: { nanosteel: 300, credits: 400 },
+  
+  // Missing Types
+  [BuildingType.SOLARIS_CITADEL]: { nanosteel: 1500 },
+  [BuildingType.TERRAGUARD_BUNKER]: { nanosteel: 1500 },
+  [BuildingType.MECHANOID_FACTORY]: { nanosteel: 1500 },
+  [BuildingType.WORKSHOP]: { credits: 1000 },
+  [BuildingType.TITAN_FACTORY]: { nanosteel: 2000, credits: 1000 },
 };
 
 // Base Production per Hour (Level 1)
@@ -50,6 +58,13 @@ const BASE_PRODUCTION: Record<BuildingType, Partial<Resources>> = {
   [BuildingType.TERRA_FACTORY]: {},
   [BuildingType.AERO_DOCK]: {},
   [BuildingType.CYBER_UPLINK]: {},
+  
+  // Missing Types
+  [BuildingType.SOLARIS_CITADEL]: {},
+  [BuildingType.TERRAGUARD_BUNKER]: {},
+  [BuildingType.MECHANOID_FACTORY]: {},
+  [BuildingType.WORKSHOP]: {},
+  [BuildingType.TITAN_FACTORY]: {},
 };
 
 // Base Build Time in Seconds (Level 1)

@@ -20,19 +20,26 @@
             },
             colors: {
               game: {
-                bg: '#f0f4f8',
-                card: '#ffffff',
-                gold: '#fbbf24',
-                energy: '#3b82f6',
-                bio: '#22c55e',
-                danger: '#ef4444',
-                dark: '#0f172a'
+                base: '#FFFFFF', // Clean Tech White
+                surface: '#F8FAFC', // Slate 50
+                cyan: '#00FFFF', // Energy Action
+                gold: '#FFD700', // Elite/Rank
+                void: '#1A0A2A', // Enemy/Void
+                voidLight: '#2D1B4E',
+                text: '#0F172A', // Slate 900
+                dim: '#94A3B8'   // Slate 400
               }
+            },
+            boxShadow: {
+              'neon': '0 0 10px rgba(0, 255, 255, 0.5), 0 0 20px rgba(0, 255, 255, 0.3)',
+              'neon-gold': '0 0 10px rgba(255, 215, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.3)',
+              'void': '0 0 15px rgba(26, 10, 42, 0.8)'
             },
             animation: {
               'float': 'float 3s ease-in-out infinite',
               'shine': 'shine 2s infinite',
               'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'scanline': 'scanline 8s linear infinite',
             },
             keyframes: {
               float: {
@@ -44,8 +51,12 @@
                 '100%': { transform: 'translateX(100%)' },
               },
               pulseGlow: {
-                '0%, 100%': { opacity: '1', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' },
-                '50%': { opacity: '.8', boxShadow: '0 0 20px rgba(59, 130, 246, 0.8)' },
+                '0%, 100%': { opacity: '1', boxShadow: '0 0 10px rgba(0, 255, 255, 0.5)' },
+                '50%': { opacity: '.8', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)' },
+              },
+              scanline: {
+                '0%': { transform: 'translateY(-100%)' },
+                '100%': { transform: 'translateY(100%)' }
               }
             }
           }
@@ -54,37 +65,28 @@
     </script>
     <style>
       body {
-        background-color: #f0f4f8;
-        color: #1e293b;
+        background-color: #F8FAFC; /* Light Theme Base */
+        color: #0F172A;
         overscroll-behavior-y: none;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
       }
       
-      /* Game UI Components */
-      .game-btn {
-        transition: all 0.1s;
-        border-bottom-width: 4px;
-      }
-      .game-btn:active {
-        transform: translateY(2px);
-        border-bottom-width: 0px;
-        margin-top: 2px;
-        margin-bottom: 2px;
-      }
-      .game-btn:disabled {
-        transform: none;
-        border-bottom-width: 0px;
-        opacity: 0.5;
-        filter: grayscale(1);
-      }
-
+      /* Glassmorphism Clean Tech */
       .glass-panel {
-        background: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.7);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      }
+
+      .glass-panel-dark {
+        background: rgba(26, 10, 42, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(0, 255, 255, 0.1);
       }
 
       /* Scrollbar */

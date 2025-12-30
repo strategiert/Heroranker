@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
 // =============================================================================
@@ -255,7 +256,7 @@ interface SpireContextType extends SpireState {
   
   // Combat Actions
   startCombat: () => void;
-  performAttack: (isCritical: boolean) => void;
+  performAttack: (multiplier: number) => void;
   performHeal: () => void;
   
   // Floor Progression
@@ -386,32 +387,44 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }, 300);
   }, []);
 
-  const performAttack = useCallback((isCritical: boolean) => {
+  // UPDATED: Now accepts multiplier float
+  const performAttack = useCallback((aimMultiplier: number) => {
     if (!state.selectedHero || !state.currentEnemy) return;
+    
+    // Attack Cost
+    const energyCost = 10;
+    if (state.energy < energyCost) {
+        // Option: Fail or just do weak attack? Let's prevent attack
+        // Assuming UI disables it, but just in case:
+        addCombatLog({ type: 'defeat', message: 'Not enough Energy!' });
+        return;
+    }
 
     const hasBonus = hasCounterBonus();
-    const baseDamage = state.selectedHero.attack;
-    const critMultiplier = isCritical ? 1.5 : 0.5; // Skill factor
-    const counterMultiplier = hasBonus ? 1.25 : 1; // Faction Bonus
-    const defense = state.currentEnemy.defense;
+    const heroPower = state.selectedHero.power;
+    const enemyDef = state.currentEnemy.defense;
     
-    // Damage Formula
-    const damageRaw = (baseDamage * critMultiplier * counterMultiplier);
-    const mitigation = defense > 0 ? (100 / (100 + defense)) : 1;
-    const finalDamage = Math.max(1, Math.floor(damageRaw * mitigation));
+    // New Formula: (Hero.PWR * AimMultiplier) - (Enemy.DEF * 0.5)
+    // Add faction bonus to power
+    const powerWithFaction = hasBonus ? heroPower * 1.2 : heroPower;
     
-    const newEnemyHp = Math.max(0, state.currentEnemy.currentHp - finalDamage);
+    let rawDamage = (powerWithFaction * aimMultiplier) - (enemyDef * 0.5);
+    rawDamage = Math.max(1, Math.floor(rawDamage)); // Minimum 1 dmg
+    
+    const newEnemyHp = Math.max(0, state.currentEnemy.currentHp - rawDamage);
     
     // Log attack
+    const isCrit = aimMultiplier > 1.5; // Gold Zone
+    
     addCombatLog({
-      type: isCritical ? 'critical' : 'attack',
-      message: isCritical 
-        ? `💥 CRITICAL! ${state.selectedHero.name} hits for ${finalDamage}!`
-        : `⚔️ ${state.selectedHero.name} hits for ${finalDamage}.`,
-      damage: finalDamage,
+      type: isCrit ? 'critical' : 'attack',
+      message: isCrit 
+        ? `💥 CRITICAL! ${state.selectedHero.name} deals ${rawDamage}!`
+        : `⚔️ ${state.selectedHero.name} hits for ${rawDamage}.`,
+      damage: rawDamage,
     });
 
-    if (isCritical) {
+    if (isCrit) {
       triggerScreenShake();
     }
 
@@ -424,6 +437,7 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
         showVictoryScreen: true,
         pendingLoot: loot,
         highScore: Math.max(prev.highScore, prev.currentFloor),
+        energy: prev.energy - energyCost,
       }));
       localStorage.setItem('spire_highscore', String(Math.max(state.highScore, state.currentFloor)));
       addCombatLog({
@@ -434,7 +448,6 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
     }
 
     // Enemy counter-attack (Turn Based)
-    // Enemy damage = Attack +/- 20%
     const variance = 0.8 + Math.random() * 0.4;
     const enemyMitigation = state.selectedHero.defense > 0 ? (100 / (100 + state.selectedHero.defense)) : 1;
     const enemyDamage = Math.max(1, Math.floor(state.currentEnemy.attack * variance * enemyMitigation));
@@ -446,6 +459,7 @@ export function SpireProvider({ children, unlockedHeroes, onAddItem }: SpireProv
       currentEnemy: { ...prev.currentEnemy!, currentHp: newEnemyHp },
       playerHp: newPlayerHp,
       healCooldown: Math.max(0, prev.healCooldown - 1),
+      energy: Math.max(0, prev.energy - energyCost),
     }));
 
     addCombatLog({

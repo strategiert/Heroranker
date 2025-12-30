@@ -1,4 +1,5 @@
-export type ResourceType = 'credits' | 'biomass' | 'nanosteel' | 'gems';
+
+import { Hero } from '../types';
 
 export interface Resources {
   credits: number;
@@ -7,33 +8,42 @@ export interface Resources {
   gems: number;
 }
 
+export type ResourceType = 'credits' | 'biomass' | 'nanosteel' | 'gems';
+
 export enum BuildingType {
-  // HQ
-  COMMAND_CENTER = 'COMMAND_CENTER',
+  // CORE
+  COMMAND_CENTER = 'COMMAND_CENTER', // Neuronale Zitadelle
   
-  // PRODUCTION
-  NANO_FOUNDRY = 'NANO_FOUNDRY',
-  HYDROPONICS = 'HYDROPONICS',
-  CREDIT_TERMINAL = 'CREDIT_TERMINAL',
+  // PRODUCTION (Economy)
+  NANO_FOUNDRY = 'NANO_FOUNDRY', // Quanten-Schmelze
+  HYDROPONICS = 'HYDROPONICS',   // Bio-Reaktor (renamed visual)
+  CREDIT_TERMINAL = 'CREDIT_TERMINAL', // Handels-Link
   
   // STORAGE
-  NANO_VAULT = 'NANO_VAULT',
+  NANO_VAULT = 'NANO_VAULT', // Zentralspeicher
   BIO_SILO = 'BIO_SILO',
   
-  // MILITARY
-  BARRACKS = 'BARRACKS',
-  MED_BAY = 'MED_BAY',
-  SHIELD_GENERATOR = 'SHIELD_GENERATOR',
+  // DEFENSE & FACTIONS (The new TD Buildings)
+  SHIELD_GENERATOR = 'SHIELD_GENERATOR', // Aegis-Kern
+  SOLARIS_CITADEL = 'SOLARIS_CITADEL',
+  TERRAGUARD_BUNKER = 'TERRAGUARD_BUNKER',
+  MECHANOID_FACTORY = 'MECHANOID_FACTORY',
   
-  // FACTORIES
-  TERRA_FACTORY = 'TERRA_FACTORY',
-  AERO_DOCK = 'AERO_DOCK',
-  CYBER_UPLINK = 'CYBER_UPLINK',
-  
-  // UTILITY & RESEARCH
-  RADAR_STATION = 'RADAR_STATION',
+  // DEVELOPMENT
   TECH_LAB = 'TECH_LAB',
-  ALLIANCE_HUB = 'ALLIANCE_HUB'
+  CYBER_UPLINK = 'CYBER_UPLINK', // Cyber-Netzknoten (Cards)
+  WORKSHOP = 'WORKSHOP', // Fertigungs-Werk (Items)
+  
+  // MILITARY (Units/Heroes)
+  BARRACKS = 'BARRACKS', // Klon-Replikator
+  TITAN_FACTORY = 'TITAN_FACTORY', // Titan-Werk
+  ALLIANCE_HUB = 'ALLIANCE_HUB', // Spire-Portal
+  
+  // LEGACY/MISC
+  MED_BAY = 'MED_BAY',
+  RADAR_STATION = 'RADAR_STATION',
+  AERO_DOCK = 'AERO_DOCK',
+  TERRA_FACTORY = 'TERRA_FACTORY' 
 }
 
 export type BuildingCategory = 
@@ -54,6 +64,7 @@ export interface BuildingState {
   status: BuildingStatus;
   finishTime?: number; // Timestamp in ms when upgrade finishes
   activeSkin?: string; // ID of the equipped skin
+  slotId: string; // The map slot where this building is placed
 }
 
 export interface BuildingDefinition {
@@ -89,8 +100,9 @@ export interface GameState {
   troops: TroopState;
   builderDroids: number;
   lastSaveTime: number;
-  totalHeroes: number;
+  heroes: Hero[]; // NOW CENTRALIZED HERE
   unlockedSkins: string[]; // List of purchased skin IDs
+  totalHeroes?: number;
 }
 
 // START RESOURCES

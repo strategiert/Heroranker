@@ -1,3 +1,4 @@
+
 export interface PowerStats {
   intelligence: number;
   strength: number;
@@ -43,6 +44,8 @@ export interface EquipmentLoadout {
   propulsion?: string;
 }
 
+export type HeroSpecialty = 'PROD' | 'MILITARY' | 'RESEARCH';
+
 export interface Hero {
   id: string;
   name: string;
@@ -54,11 +57,22 @@ export interface Hero {
   image: {
     url: string; // URL or Base64 string
   };
+  sprites?: {
+    sheet: string; // Base64 containing 4 frames: Left, Right, Up-Left, Up-Right
+  };
   video?: {
     url: string; // URL to the Veo generated MP4
   };
   description?: string; // Short AI generated summary
   equipment?: EquipmentLoadout;
+  
+  // --- RPG PROGRESSION ---
+  level: number;
+  currentXp: number;
+  xpToNextLevel: number;
+  rank: number; // Tier 1-5
+  assignedBuildingId?: string | null; // ID of the building where the hero is training/working
+  specialty?: HeroSpecialty; // New Synergy Property
 }
 
 export interface WikiHero {
@@ -118,4 +132,4 @@ export interface CombatLog {
   isCrit: boolean;
 }
 
-export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab' | 'spire' | 'nanoforge' | 'profile';
+export type ViewState = 'wiki' | 'create' | 'detail' | 'forge' | 'station' | 'ai_lab' | 'spire' | 'nanoforge' | 'profile' | 'invasion';

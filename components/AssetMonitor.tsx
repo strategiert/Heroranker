@@ -1,8 +1,36 @@
+
 import React, { useState, useEffect } from 'react';
 import { BUILDING_DEFINITIONS } from '../data/buildings';
 import { SKIN_DATABASE } from '../data/skins';
 import { getBuildingAssetPath, getMapAssetPath } from '../utils/assets';
 import { CheckCircle2, AlertTriangle, FileImage, RefreshCw, FolderOpen } from 'lucide-react';
+
+const AssetRow: React.FC<{ label: string, path: string, found: boolean }> = ({ label, path, found }) => (
+    <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700 mb-2">
+        <div className="flex items-center gap-3 overflow-hidden">
+            <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 ${found ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                {found ? <FileImage className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+            </div>
+            <div className="min-w-0">
+                <div className="text-white font-bold text-xs truncate">{label}</div>
+                <div className="text-[10px] text-slate-500 font-mono truncate max-w-[200px]" title={path}>
+                    {path}
+                </div>
+            </div>
+        </div>
+        <div className="text-right shrink-0 pl-2">
+            {found ? (
+                <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
+                    GEFUNDEN
+                </span>
+            ) : (
+                <span className="text-[10px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full border border-yellow-500/20">
+                    SVG MODUS
+                </span>
+            )}
+        </div>
+    </div>
+);
 
 export const AssetMonitor = () => {
     const [status, setStatus] = useState<Record<string, boolean>>({});
@@ -38,33 +66,6 @@ export const AssetMonitor = () => {
     useEffect(() => {
         runCheck();
     }, []);
-
-    const AssetRow = ({ label, path, found }: { label: string, path: string, found: boolean }) => (
-        <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700 mb-2">
-            <div className="flex items-center gap-3 overflow-hidden">
-                <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 ${found ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                    {found ? <FileImage className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                </div>
-                <div className="min-w-0">
-                    <div className="text-white font-bold text-xs truncate">{label}</div>
-                    <div className="text-[10px] text-slate-500 font-mono truncate max-w-[200px]" title={path}>
-                        {path}
-                    </div>
-                </div>
-            </div>
-            <div className="text-right shrink-0 pl-2">
-                {found ? (
-                    <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
-                        GEFUNDEN
-                    </span>
-                ) : (
-                    <span className="text-[10px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full border border-yellow-500/20">
-                        SVG MODUS
-                    </span>
-                )}
-            </div>
-        </div>
-    );
 
     return (
         <div className="space-y-4">

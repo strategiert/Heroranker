@@ -1,337 +1,233 @@
+
 import React, { useState } from 'react';
 import { 
   X, Zap, Shield, Users, BarChart3, Lock, 
   Unlock, Timer, ArrowUpCircle, Activity, 
-  Sword, Crosshair, Plane, Radio, Settings, Palette, Check, Gem
+  Sword, Crosshair, Plane, Radio, Settings, Palette, Check, Gem, UserPlus, ChevronRight,
+  Clock, ArrowRight, Star, UserCheck, Microchip, Box
 } from 'lucide-react';
 import { BuildingState, BuildingType } from '../types/economy';
 import { BUILDING_DEFINITIONS } from '../data/buildings';
-import { SKIN_DATABASE } from '../data/skins';
-import { calculateCost, calculateBuildTime, formatDuration } from '../utils/engine';
+import { calculateCost, calculateBuildTime, formatDuration, calculateXpGain, calculateProduction } from '../utils/engine';
 import { useGame } from '../context/GameContext';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useInventory } from '../context/InventoryContext'; // Import inventory context
+import { Hero } from '../types';
 
 interface BuildingDetailModalProps {
   building: BuildingState;
   onClose: () => void;
 }
 
-// --- SUB-COMPONENTS FOR SPECIFIC BUILDING TYPES ---
+// ... (Existing TrainingConsole & AssignmentConsole components remain the same, just hidden for brevity in this XML block but assumed to be there. I will include full file content to be safe) ...
 
-const ShieldConsole = () => {
-  const [mode, setMode] = useState<'reflect' | 'absorb'>('absorb');
-  const [frequency, setFrequency] = useState(50);
+const TrainingConsole = ({ building }: { building: BuildingState }) => {
+    const [selectedUnit, setSelectedUnit] = useState(0);
+    const [amount, setAmount] = useState(10);
+    
+    // Mock Units for visual match
+    const UNITS = [
+        { id: 1, name: 'Rekrut', level: 1, power: 10, img: '🔫' },
+        { id: 2, name: 'Soldat', level: 5, power: 25, img: '🪖' },
+        { id: 3, name: 'Elite', level: 10, power: 60, img: '👮' },
+        { id: 4, name: 'Exo', level: 15, power: 150, img: '🦾' },
+        { id: 5, name: 'Mech', level: 20, power: 300, img: '🤖' },
+    ];
 
-  return (
-    <div className="space-y-4">
-      <div className="bg-blue-950/50 border border-blue-500/30 p-4 rounded-xl relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-transparent animate-pulse"></div>
-        <div className="relative z-10 flex justify-between items-center mb-2">
-          <span className="text-blue-400 text-xs font-bold uppercase tracking-widest">Schild-Integrität</span>
-          <span className="text-white font-mono font-bold">100%</span>
-        </div>
-        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-          <div className="h-full w-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_#3b82f6]"></div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <button 
-          onClick={() => setMode('reflect')}
-          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${mode === 'reflect' ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-        >
-          <Zap className="w-6 h-6" />
-          <span className="text-xs font-bold uppercase">Reflektion</span>
-        </button>
-        <button 
-          onClick={() => setMode('absorb')}
-          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${mode === 'absorb' ? 'bg-green-600 border-green-400 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
-        >
-          <Shield className="w-6 h-6" />
-          <span className="text-xs font-bold uppercase">Absorption</span>
-        </button>
-      </div>
-
-      <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-        <label className="text-xs text-slate-400 uppercase font-bold mb-2 block flex justify-between">
-          <span>Modulations-Frequenz</span>
-          <span className="text-blue-400 font-mono">{frequency} Hz</span>
-        </label>
-        <input 
-          type="range" 
-          min="0" 
-          max="100" 
-          value={frequency} 
-          onChange={(e) => setFrequency(parseInt(e.target.value))}
-          className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-blue-500"
-        />
-        <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
-          <span>ALPHA</span>
-          <span>OMEGA</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const AllianceHubConsole = () => {
-  const members = [
-    { name: "NeonViper", action: "Baut Nano-Vault", time: "12m" },
-    { name: "CyberGoth", action: "Forscht Laser V", time: "45m" },
-    { name: "IronLotus", action: "Repariert Schild", time: "02m" },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center bg-purple-900/20 p-3 rounded-xl border border-purple-500/30">
-        <div className="flex items-center gap-2 text-purple-400">
-          <Radio className="w-5 h-5 animate-pulse" />
-          <span className="font-bold text-sm uppercase">Subraum-Netzwerk</span>
-        </div>
-        <span className="text-xs bg-purple-500 text-white px-2 py-0.5 rounded font-bold">ONLINE</span>
-      </div>
-
-      <div className="space-y-2">
-        {members.map((m, i) => (
-          <div key={i} className="flex items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <div>
-              <div className="text-sm font-bold text-white">{m.name}</div>
-              <div className="text-xs text-slate-400">{m.action}</div>
-            </div>
-            <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg uppercase transition-colors">
-              Helfen ({m.time})
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <button className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-lg uppercase tracking-wide active:scale-95 transition-all">
-        Allen Helfen (+150 Credits)
-      </button>
-    </div>
-  );
-};
-
-const ProductionConsole = ({ resource }: { resource: string }) => {
-  // Dummy Data for Graph
-  const data = [
-    { name: '00:00', prod: 40 },
-    { name: '04:00', prod: 30 },
-    { name: '08:00', prod: 20 },
-    { name: '12:00', prod: 65 },
-    { name: '16:00', prod: 80 },
-    { name: '20:00', prod: 95 },
-    { name: '24:00', prod: 100 },
-  ];
-
-  const color = resource === 'nanosteel' ? '#3b82f6' : resource === 'biomass' ? '#22c55e' : '#eab308';
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 h-48">
-        <div className="text-xs text-slate-400 uppercase font-bold mb-2 flex items-center gap-2">
-          <Activity className="w-4 h-4" /> Output Effizienz (24h)
-        </div>
-        <ResponsiveContainer width="100%" height="80%">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id={`color${resource}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
-                <stop offset="95%" stopColor={color} stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <Tooltip 
-                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
-                itemStyle={{ color: '#fff', fontSize: '10px' }}
-            />
-            <Area type="monotone" dataKey="prod" stroke={color} fillOpacity={1} fill={`url(#color${resource})`} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="flex gap-2">
-        <div className="flex-1 bg-slate-800 p-3 rounded-xl border border-slate-700 text-center">
-            <div className="text-[10px] text-slate-500 uppercase font-bold">Stündlich</div>
-            <div className="text-lg font-black text-white" style={{ color }}>+350</div>
-        </div>
-        <div className="flex-1 bg-slate-800 p-3 rounded-xl border border-slate-700 text-center">
-            <div className="text-[10px] text-slate-500 uppercase font-bold">Lager</div>
-            <div className="text-lg font-black text-white">85%</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const StorageConsole = () => {
-  const [locked, setLocked] = useState(false);
-
-  return (
-    <div className="space-y-4">
-      <div className={`p-6 rounded-2xl border-2 flex flex-col items-center justify-center gap-4 transition-all ${locked ? 'bg-red-900/20 border-red-500/50' : 'bg-slate-800 border-slate-700'}`}>
-        <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${locked ? 'bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.4)]' : 'bg-slate-700 text-slate-400'}`}>
-          {locked ? <Lock className="w-8 h-8" /> : <Unlock className="w-8 h-8" />}
-        </div>
-        <div className="text-center">
-          <h3 className={`text-lg font-black uppercase ${locked ? 'text-red-400' : 'text-slate-200'}`}>
-            {locked ? 'Sektoren Verriegelt' : 'Zugriff Offen'}
-          </h3>
-          <p className="text-xs text-slate-500 max-w-[200px] mt-1">
-            {locked ? 'Keine Entnahme möglich. Schutz vor Plünderung aktiv.' : 'Standard Betriebsmodus.'}
-          </p>
-        </div>
-        <button 
-          onClick={() => setLocked(!locked)}
-          className={`px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${locked ? 'bg-red-500 text-white' : 'bg-slate-600 text-white hover:bg-slate-500'}`}
-        >
-          {locked ? 'Entriegeln' : 'Verriegeln (8h)'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const BarracksConsole = () => {
-  return (
-    <div className="space-y-3">
-      {['T1 Infanterie', 'T2 Exoskelett', 'T3 Mech-Suit'].map((unit, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl border border-slate-700">
-          <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-600">
-            <Sword className="w-6 h-6 text-slate-400" />
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-bold text-white uppercase">{unit}</div>
-            <div className="text-xs text-slate-400">Kampfkraft: {(i+1)*50}</div>
-          </div>
-          <button className="px-3 py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-black rounded-lg uppercase">
-            Trainieren
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const DesignStudio = ({ buildingId }: { buildingId: string }) => {
-    const { state, unlockSkin, equipSkin } = useGame();
-    const activeSkinId = state.buildings.find(b => b.id === buildingId)?.activeSkin || 'default';
-    const [previewSkin, setPreviewSkin] = useState(activeSkinId);
-
-    const activeDef = SKIN_DATABASE[previewSkin];
-    const isUnlocked = state.unlockedSkins.includes(previewSkin);
-    const isEquipped = activeSkinId === previewSkin;
-
-    const handleAction = () => {
-        if (isUnlocked) {
-            equipSkin(buildingId, previewSkin);
-        } else {
-            unlockSkin(previewSkin);
-        }
-    };
+    const currentUnit = UNITS[selectedUnit];
+    const isLocked = building.level < currentUnit.level;
 
     return (
-        <div className="space-y-4 h-full flex flex-col">
-            {/* Preview Box */}
-            <div className={`
-                flex-1 rounded-2xl flex items-center justify-center relative transition-all duration-500
-                ${activeDef.styleClass} border-2 overflow-hidden min-h-[180px]
-            `}>
-                {/* Simulated Banana Particles */}
-                {activeDef.effect === 'banana' && (
-                    <>
-                        <div className="absolute inset-0 bg-yellow-500/10 animate-pulse"></div>
-                        {[...Array(5)].map((_,i) => (
-                            <div key={i} className="absolute text-xl animate-float opacity-50" style={{
-                                left: `${Math.random()*80 + 10}%`,
-                                top: `${Math.random()*80 + 10}%`,
-                                animationDelay: `${i * 0.5}s`,
-                                animationDuration: '3s'
-                            }}>🍌</div>
-                        ))}
-                    </>
-                )}
-                {/* Glitch Effect */}
-                {activeDef.effect === 'glitch' && (
-                    <div className="absolute inset-0 bg-fuchsia-500/10 animate-pulse" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 10%, 0 10%)' }}></div>
-                )}
-
-                <div className={`w-24 h-24 rounded-2xl flex items-center justify-center bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl`}>
-                    <Settings className={`w-12 h-12 ${activeDef.iconClass}`} />
+        <div className="space-y-4">
+            <div className="bg-slate-100 p-3 rounded-xl flex justify-between items-center text-slate-800 shadow-sm border border-slate-200">
+                <div className="text-center">
+                    <div className="text-xs font-bold text-slate-500 uppercase">Kampfkraft</div>
+                    <div className="text-xl font-black bg-blue-100 text-blue-600 px-2 rounded">{currentUnit.power}</div>
                 </div>
-
-                <div className="absolute bottom-3 left-0 right-0 text-center">
-                    <span className="bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white uppercase tracking-widest border border-white/10">
-                        {activeDef.name}
-                    </span>
+                <div className="text-center">
+                    <div className="text-xs font-bold text-slate-500 uppercase">Angriff</div>
+                    <div className="text-lg font-black">{Math.floor(currentUnit.power * 0.6)}</div>
+                </div>
+                <div className="text-center">
+                    <div className="text-xs font-bold text-slate-500 uppercase">HP</div>
+                    <div className="text-lg font-black">{Math.floor(currentUnit.power * 1.2)}</div>
                 </div>
             </div>
-
-            {/* Skin Selector */}
-            <div className="space-y-2">
-                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    {Object.values(SKIN_DATABASE).map(skin => (
-                        <button 
-                            key={skin.id}
-                            onClick={() => setPreviewSkin(skin.id)}
-                            className={`
-                                relative w-16 h-16 rounded-xl border-2 shrink-0 flex items-center justify-center transition-all
-                                ${previewSkin === skin.id ? 'border-white scale-105' : 'border-slate-700 opacity-60 hover:opacity-100'}
-                                ${skin.id === 'banana' ? 'bg-yellow-900' : 'bg-slate-800'}
-                            `}
-                        >
-                            <div className={`w-8 h-8 rounded-full ${skin.styleClass.split(' ')[0]}`}></div>
-                            {state.unlockedSkins.includes(skin.id) && (
-                                <div className="absolute -top-1 -right-1 bg-green-500 text-black rounded-full p-0.5 border border-black">
-                                    <Check className="w-2 h-2" />
-                                </div>
-                            )}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="mb-2">
-                        <h4 className="text-white font-bold">{activeDef.name}</h4>
-                        <p className="text-slate-400 text-xs">{activeDef.description}</p>
-                    </div>
-                    
-                    <button 
-                        onClick={handleAction}
-                        disabled={isEquipped}
-                        className={`w-full py-3 rounded-xl font-black text-sm uppercase tracking-wide shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2
-                            ${isEquipped 
-                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-                                : isUnlocked 
-                                    ? 'bg-blue-600 hover:bg-blue-500 text-white' 
-                                    : 'bg-green-600 hover:bg-green-500 text-white'
-                            }
+            <div className="grid grid-cols-5 gap-2">
+                {UNITS.map((u, idx) => (
+                    <button
+                        key={u.id}
+                        onClick={() => setSelectedUnit(idx)}
+                        className={`
+                            relative aspect-square rounded-xl border-2 flex flex-col items-center justify-center transition-all overflow-hidden
+                            ${selectedUnit === idx ? 'border-yellow-400 bg-yellow-50 shadow-md transform scale-105 z-10' : 'border-slate-200 bg-white hover:bg-slate-50'}
                         `}
                     >
-                        {isEquipped ? (
-                            <>Aktiviert</>
-                        ) : isUnlocked ? (
-                            <>Ausrüsten</>
-                        ) : (
-                            <>
-                                Kaufen 
-                                {activeDef.cost.credits && <span className="bg-black/20 px-1.5 py-0.5 rounded ml-1">{activeDef.cost.credits} Cr</span>}
-                                {activeDef.cost.nanosteel && <span className="bg-black/20 px-1.5 py-0.5 rounded ml-1">{activeDef.cost.nanosteel} Ns</span>}
-                                {activeDef.cost.gems && <span className="bg-yellow-900/40 text-yellow-300 px-1.5 py-0.5 rounded ml-1 flex items-center gap-1"><Gem className="w-3 h-3"/> {activeDef.cost.gems}</span>}
-                            </>
+                        <div className="text-2xl">{u.img}</div>
+                        <div className="text-[9px] font-bold uppercase mt-1">Lv.{u.level}</div>
+                        {building.level < u.level && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                <Lock className="w-4 h-4 text-white" />
+                            </div>
                         )}
+                        <div className="absolute top-0 left-0 bg-black/50 text-white text-[8px] px-1 rounded-br">
+                            v.{u.id}
+                        </div>
                     </button>
+                ))}
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center text-4xl border border-slate-200 shadow-inner">
+                        {currentUnit.img}
+                    </div>
+                    <div className="flex-1">
+                        <div className="flex justify-between mb-1">
+                            <span className="font-bold text-slate-700">{currentUnit.name}</span>
+                            <span className="font-mono text-slate-500">{amount}</span>
+                        </div>
+                        <input 
+                            type="range" 
+                            min="1" max="100" 
+                            value={amount} 
+                            onChange={(e) => setAmount(parseInt(e.target.value))}
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                        />
+                        <div className="text-xs text-slate-400 mt-1 flex justify-between">
+                            <span>Ausbildung läuft:</span>
+                            <span className="font-mono">00:05:00</span>
+                        </div>
+                    </div>
                 </div>
+                <button 
+                    disabled={isLocked}
+                    className={`
+                        w-full py-3 rounded-xl font-black text-lg uppercase tracking-wider shadow-lg active:scale-95 transition-all
+                        ${isLocked ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-400 text-white border-b-4 border-blue-700 active:border-b-0 active:translate-y-1'}
+                    `}
+                >
+                    {isLocked ? `Benötigt Lv. ${currentUnit.level}` : 'Ausbilden'}
+                </button>
             </div>
         </div>
     );
 };
 
-// --- MAIN MODAL ---
+const AssignmentConsole = ({ building }: { building: BuildingState }) => {
+    const { state, assignHero } = useGame();
+    const assignedHero = state.heroes.find(h => h.assignedBuildingId === building.id);
+    const availableHeroes = state.heroes.filter(h => !h.assignedBuildingId || h.assignedBuildingId === building.id);
+
+    return (
+        <div className="space-y-4">
+            <div className={`p-4 rounded-xl border-2 flex items-center gap-4 ${assignedHero ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                {assignedHero ? (
+                    <>
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-blue-500 shadow-md">
+                            <img src={assignedHero.image.url} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                                <span className="font-black text-slate-800 uppercase">{assignedHero.name}</span>
+                                <span className="bg-blue-100 text-blue-600 text-[10px] px-1.5 py-0.5 rounded font-bold">{assignedHero.specialty}</span>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">Produktion Boost: <span className="text-green-600 font-bold">+{Math.floor(1 + (assignedHero.powerstats.intelligence / 1000) * 100)}%</span></div>
+                            <button onClick={() => assignHero(assignedHero.id, null)} className="mt-2 text-[10px] text-red-500 font-bold uppercase hover:underline">Abziehen</button>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex flex-col items-center justify-center w-full py-2 text-slate-400">
+                        <UserPlus className="w-8 h-8 mb-1" />
+                        <span className="text-xs font-bold uppercase">Kein Commander zugewiesen</span>
+                    </div>
+                )}
+            </div>
+            <div className="text-xs font-bold text-slate-500 uppercase px-1">Verfügbare Commander</div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                {availableHeroes.length === 0 ? (
+                    <div className="text-center p-4 text-slate-400 italic text-xs">Keine freien Helden verfügbar.</div>
+                ) : (
+                    availableHeroes.map(hero => {
+                        const isAssignedHere = hero.id === assignedHero?.id;
+                        if (isAssignedHere) return null; 
+                        const bonus = Math.floor((1 + (hero.powerstats.intelligence / 1000) + (hero.specialty === 'PROD' ? 0.2 : 0)) * 100 - 100);
+                        return (
+                            <button key={hero.id} onClick={() => assignHero(hero.id, building.id)} className="w-full flex items-center gap-3 p-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all group">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-200 border border-slate-300">
+                                    <img src={hero.image.url} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <div className="font-bold text-slate-700 text-xs truncate">{hero.name}</div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className={`text-[9px] px-1 rounded font-bold ${hero.specialty === 'PROD' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>{hero.specialty}</span>
+                                        <span className="text-[10px] text-green-600 font-bold">+{bonus}%</span>
+                                    </div>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                    <Check className="w-4 h-4" />
+                                </div>
+                            </button>
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- PRODUCTION COMPONENT (NEW) ---
+const ProductionConsole = ({ building }: { building: BuildingState }) => {
+    const { state, deductResources } = useGame();
+    const { addItem } = useInventory();
+    
+    const ITEMS = [
+        { id: 'chip_atk', name: 'Angriffs-Chip', cost: { nanosteel: 500 }, desc: '+ATK für Invasion', icon: <Microchip className="w-6 h-6 text-red-500" /> },
+        { id: 'chip_spd', name: 'Speed-Chip', cost: { nanosteel: 500 }, desc: '+Attack Speed', icon: <Zap className="w-6 h-6 text-yellow-500" /> },
+        { id: 'item_rep', name: 'Reparatur-Kit', cost: { biomass: 200 }, desc: 'Heilt Basis im Kampf', icon: <Box className="w-6 h-6 text-green-500" /> },
+    ];
+
+    const handleProduce = (item: any) => {
+        if(deductResources(item.cost)) {
+            // Add to inventory directly (simplified for MVP)
+            addItem({
+                id: crypto.randomUUID(),
+                templateId: item.id,
+                name: item.name,
+                category: 'consumable',
+                rarity: 'common',
+                description: item.desc
+            }, 1);
+            alert(`${item.name} produziert!`);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            <div className="text-xs text-slate-500 font-bold uppercase mb-2">Verfügbare Blaupausen</div>
+            {ITEMS.map((item, idx) => (
+                <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 flex items-center gap-3 shadow-sm">
+                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                        {item.icon}
+                    </div>
+                    <div className="flex-1">
+                        <div className="font-bold text-slate-800 text-sm">{item.name}</div>
+                        <div className="text-[10px] text-slate-500">{item.desc}</div>
+                    </div>
+                    <button 
+                        onClick={() => handleProduce(item)}
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-md active:scale-95 transition-all"
+                    >
+                        {item.cost.nanosteel ? `${item.cost.nanosteel} Nano` : `${item.cost.biomass} Bio`}
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 export const BuildingDetailModal: React.FC<BuildingDetailModalProps> = ({ building, onClose }) => {
-  const { state, startUpgrade, deductResources } = useGame();
+  const { state, startUpgrade, speedUpBuilding } = useGame();
   const def = BUILDING_DEFINITIONS[building.type];
-  const [tab, setTab] = useState<'manage' | 'upgrade' | 'design'>('manage');
+  const [tab, setTab] = useState<'info' | 'upgrade' | 'training' | 'assign' | 'production'>('upgrade');
 
   if (!def) return null;
 
@@ -341,161 +237,162 @@ export const BuildingDetailModal: React.FC<BuildingDetailModalProps> = ({ buildi
                     state.resources.nanosteel >= (nextCost.nanosteel || 0) &&
                     state.resources.biomass >= (nextCost.biomass || 0);
 
+  const isMaxLevel = building.level >= def.maxLevel;
+  const isUpgrading = building.status === 'UPGRADING';
+
+  // Requirements Check
+  const reqs = [
+      { label: `Hauptquartier Lv. ${building.level + 1}`, met: true },
+      { label: `${nextCost.credits} Credits`, met: state.resources.credits >= (nextCost.credits || 0) },
+      { label: `${nextCost.nanosteel} Nanosteel`, met: state.resources.nanosteel >= (nextCost.nanosteel || 0) },
+      { label: `${nextCost.biomass} Biomass`, met: state.resources.biomass >= (nextCost.biomass || 0) },
+  ].filter(r => !r.label.startsWith('0 '));
+
   const handleUpgrade = () => {
     startUpgrade(building.id);
     onClose();
   };
 
-  // Determine special console content based on type
-  const renderConsole = () => {
-    switch (def.type) {
-      case 'DEFENSE': return <ShieldConsole />;
-      case 'UTILITY': 
-        if (def.id === 'ALLIANCE_HUB') return <AllianceHubConsole />;
-        return <div className="p-8 text-center text-slate-500">Radar Systeme online.</div>;
-      case 'PRODUCTION': return <ProductionConsole resource={def.resource || 'credits'} />;
-      case 'STORAGE': return <StorageConsole />;
-      case 'MILITARY': return <BarracksConsole />;
-      case 'HQ': return (
-        <div className="p-4 bg-slate-800 rounded-xl border border-slate-700 text-center">
-          <div className="w-20 h-20 bg-slate-700 rounded-full mx-auto mb-3 flex items-center justify-center">
-            <Users className="w-10 h-10 text-slate-400" />
-          </div>
-          <div className="text-white font-bold">Commander Level {building.level}</div>
-          <div className="text-slate-400 text-xs mt-1">Nächster Meilenstein: Level {building.level + 1}</div>
-        </div>
-      );
-      default: return <div className="p-8 text-center text-slate-500 italic">Systeme laufen im Normalbetrieb.</div>;
-    }
-  };
+  const assignedHero = state.heroes.find(h => h.assignedBuildingId === building.id);
+  const currProd = calculateProduction(def, building.level, assignedHero);
+  const nextProd = calculateProduction(def, building.level + 1, assignedHero);
+  
+  const resourceKey = def.resource || 'credits';
+  // @ts-ignore
+  const currVal = currProd[resourceKey] || 0;
+  // @ts-ignore
+  const nextVal = nextProd[resourceKey] || 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-950 w-full max-w-lg h-[85vh] sm:h-auto sm:rounded-2xl rounded-t-2xl flex flex-col shadow-2xl border border-slate-800 overflow-hidden animate-in slide-in-from-bottom-10">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-[#f0f4f8] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         
-        {/* Header */}
-        <div className="p-4 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0">
-          <div>
-            <div className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> ONLINE
-            </div>
-            <h2 className="text-xl font-black text-white uppercase tracking-wide leading-none">{def.name}</h2>
-            <div className="text-slate-400 text-xs font-mono mt-1">LVL {building.level} // ID: {building.id.split('_')[1]}</div>
-          </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-900/50">
-          <button 
-            onClick={() => setTab('manage')}
-            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-colors ${tab === 'manage' ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/5' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            <Settings className="w-4 h-4" /> Konsole
-          </button>
-          <button 
-            onClick={() => setTab('design')}
-            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-colors ${tab === 'design' ? 'text-purple-400 border-b-2 border-purple-400 bg-purple-500/5' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            <Palette className="w-4 h-4" /> Design
-          </button>
-          <button 
-            onClick={() => setTab('upgrade')}
-            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 transition-colors ${tab === 'upgrade' ? 'text-green-400 border-b-2 border-green-400 bg-green-500/5' : 'text-slate-500 hover:text-slate-300'}`}
-          >
-            <ArrowUpCircle className="w-4 h-4" /> Upgrade
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar bg-slate-950">
-          {tab === 'manage' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-              {renderConsole()}
-              
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Gebäude Status</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-[10px] text-slate-600 uppercase">Energieverbrauch</div>
-                    <div className="text-white font-mono font-bold">120 kW/h</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-600 uppercase">Effizienz</div>
-                    <div className="text-green-400 font-mono font-bold">100%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'design' && (
-             <div className="h-full animate-in slide-in-from-right-4 duration-300">
-                 <DesignStudio buildingId={building.id} />
-             </div>
-          )}
-
-          {tab === 'upgrade' && (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-              {/* Stats Preview */}
-              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                <div>
-                  <div className="text-xs text-slate-500 uppercase font-bold">Aktuelles Level</div>
-                  <div className="text-2xl font-black text-white">{building.level}</div>
-                </div>
-                <div className="text-slate-600">➜</div>
-                <div className="text-right">
-                  <div className="text-xs text-green-500 uppercase font-bold">Nächstes Level</div>
-                  <div className="text-2xl font-black text-green-400">{building.level + 1}</div>
-                </div>
-              </div>
-
-              {/* Cost Breakdown */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Baukosten</h4>
-                {Object.entries(nextCost).map(([res, amount]) => {
-                  if (!amount) return null;
-                  const myRes = state.resources[res as keyof typeof state.resources];
-                  const enough = myRes >= amount;
-                  
-                  return (
-                    <div key={res} className="flex justify-between items-center p-3 bg-slate-900 rounded-lg border border-slate-800">
-                      <span className="text-sm font-bold text-slate-300 capitalize">{res}</span>
-                      <div className={`font-mono font-bold ${enough ? 'text-white' : 'text-red-500'}`}>
-                        {amount} <span className="text-slate-600 text-xs">/ {Math.floor(myRes)}</span>
-                      </div>
+        {/* HEADER */}
+        <div className="bg-slate-800 p-4 pb-12 relative">
+            <button onClick={onClose} className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white p-2 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+            <div className="flex justify-center mb-[-40px]">
+                <div className="relative">
+                    <div className="w-24 h-24 bg-gradient-to-b from-blue-400 to-blue-600 rounded-2xl shadow-lg border-4 border-white flex items-center justify-center transform rotate-3 overflow-hidden">
+                        {assignedHero ? (
+                            <img src={assignedHero.image.url} className="w-full h-full object-cover" />
+                        ) : (
+                            <Settings className="w-12 h-12 text-white/90" />
+                        )}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Action Button */}
-              <div className="pt-4">
-                <div className="flex items-center gap-2 mb-2 justify-center text-slate-400 text-xs font-bold uppercase">
-                  <Timer className="w-4 h-4" /> Bauzeit: {formatDuration(nextTime)}
+                    <div className="absolute -bottom-3 -right-3 bg-yellow-400 text-yellow-900 font-black text-xs px-2 py-1 rounded-lg shadow-sm border border-yellow-200">
+                        Lv.{building.level}
+                    </div>
                 </div>
-                <button 
-                  onClick={handleUpgrade}
-                  disabled={!canAfford || building.status === 'UPGRADING'}
-                  className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-wider shadow-lg transition-all active:scale-95 
-                    ${building.status === 'UPGRADING' 
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-                      : canAfford 
-                        ? 'bg-green-600 hover:bg-green-500 text-white' 
-                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    }`}
-                >
-                  {building.status === 'UPGRADING' 
-                    ? 'Wird gebaut...' 
-                    : canAfford 
-                      ? 'Upgrade Starten' 
-                      : 'Ressourcen fehlen'}
-                </button>
-              </div>
             </div>
-          )}
+        </div>
+
+        {/* TITLE & TABS */}
+        <div className="pt-12 px-6 pb-2 text-center bg-white border-b border-slate-100">
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{def.name}</h2>
+            {assignedHero && <div className="text-[10px] text-blue-500 font-bold uppercase mt-1">Cmdr. {assignedHero.name}</div>}
+            
+            <div className="flex justify-center gap-2 mt-4 mb-2 overflow-x-auto no-scrollbar py-1">
+                {def.type === 'MILITARY' && (
+                    <button onClick={() => setTab('training')} className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap ${tab === 'training' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                        Ausbildung
+                    </button>
+                )}
+                {/* Enable Production tab for factories */}
+                {(def.type === 'PRODUCTION' || def.id === 'WORKSHOP') && (
+                    <button onClick={() => setTab('production')} className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap ${tab === 'production' ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                        Fertigung
+                    </button>
+                )}
+                <button onClick={() => setTab('upgrade')} className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap ${tab === 'upgrade' ? 'bg-green-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                    Verbessern
+                </button>
+                <button onClick={() => setTab('assign')} className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap ${tab === 'assign' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                    Stationierung
+                </button>
+                <button onClick={() => setTab('info')} className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all whitespace-nowrap ${tab === 'info' ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                    Info
+                </button>
+            </div>
+        </div>
+
+        {/* CONTENT AREA */}
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-[#f0f4f8]">
+            
+            {tab === 'training' && <TrainingConsole building={building} />}
+            {tab === 'assign' && <AssignmentConsole building={building} />}
+            {tab === 'production' && <ProductionConsole building={building} />}
+
+            {tab === 'upgrade' && (
+                <div className="space-y-4">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2">
+                            <span className="text-xs font-bold text-slate-500 uppercase">Produktion / Std</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-700">{currVal}</span>
+                                <ArrowRight className="w-3 h-3 text-green-500" />
+                                <span className="font-mono font-bold text-green-600">{nextVal}</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 uppercase">Kampfkraft</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-700">{building.level * 100}</span>
+                                <ArrowRight className="w-3 h-3 text-green-500" />
+                                <span className="font-mono font-bold text-green-600">{(building.level + 1) * 100}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">Voraussetzungen</div>
+                        {reqs.map((req, i) => (
+                            <div key={i} className="flex justify-between items-center p-3 border-b border-slate-100 last:border-0">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${req.met ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                        {req.met ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                    </div>
+                                    <span className={`text-sm font-bold ${req.met ? 'text-slate-700' : 'text-red-500'}`}>{req.label}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        {isUpgrading ? (
+                            <div className="col-span-2 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col items-center justify-center text-blue-800">
+                                <div className="font-bold uppercase text-xs mb-1">Upgrade läuft</div>
+                                <div className="font-mono text-xl font-black">{formatDuration(300)}</div>
+                                <button onClick={() => speedUpBuilding(building.id, 60)} className="mt-2 text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-500">Beschleunigen</button>
+                            </div>
+                        ) : (
+                            <>
+                                <button className="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 rounded-xl py-3 px-2 flex flex-col items-center justify-center border-b-4 border-yellow-600 active:border-b-0 active:translate-y-1 transition-all shadow-sm">
+                                    <span className="text-[10px] font-black uppercase">Jetzt beenden</span>
+                                    <div className="flex items-center gap-1 font-black text-sm"><Gem className="w-3 h-3" /> 50</div>
+                                </button>
+                                <button 
+                                    onClick={handleUpgrade}
+                                    disabled={!canAfford}
+                                    className={`
+                                        rounded-xl py-3 px-2 flex flex-col items-center justify-center border-b-4 active:border-b-0 active:translate-y-1 transition-all shadow-sm
+                                        ${canAfford ? 'bg-green-500 hover:bg-green-400 text-white border-green-700' : 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed'}
+                                    `}
+                                >
+                                    <span className="text-[10px] font-black uppercase">Verbessern</span>
+                                    <div className="flex items-center gap-1 font-black text-sm"><Clock className="w-3 h-3" /> {formatDuration(nextTime)}</div>
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {tab === 'info' && (
+                <div className="text-center p-8 text-slate-500 italic">
+                    <p>{def.description}</p>
+                </div>
+            )}
+
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useRef } from 'react';
 import { Item } from '../context/SpireContext';
 import { Box, CheckCircle2 } from 'lucide-react';
+import { useAnimation } from '../context/AnimationContext';
 
 interface VictoryScreenProps {
   floor: number;
@@ -10,16 +12,18 @@ interface VictoryScreenProps {
 }
 
 const RARITY_COLORS = {
-  common: { bg: 'bg-slate-700', border: 'border-slate-500', text: 'text-slate-300' },
-  uncommon: { bg: 'bg-green-900/50', border: 'border-green-500', text: 'text-green-400' },
-  rare: { bg: 'bg-blue-900/50', border: 'border-blue-500', text: 'text-blue-400' },
-  epic: { bg: 'bg-purple-900/50', border: 'border-purple-500', text: 'text-purple-400' },
-  legendary: { bg: 'bg-yellow-900/50', border: 'border-yellow-500', text: 'text-yellow-400' },
+  common: { bg: 'bg-slate-700', border: 'border-slate-500', text: 'text-slate-300', hex: '#cbd5e1' },
+  uncommon: { bg: 'bg-green-900/50', border: 'border-green-500', text: 'text-green-400', hex: '#4ade80' },
+  rare: { bg: 'bg-blue-900/50', border: 'border-blue-500', text: 'text-blue-400', hex: '#60a5fa' },
+  epic: { bg: 'bg-purple-900/50', border: 'border-purple-500', text: 'text-purple-400', hex: '#c084fc' },
+  legendary: { bg: 'bg-yellow-900/50', border: 'border-yellow-500', text: 'text-yellow-400', hex: '#facc15' },
 };
 
 export function VictoryScreen({ floor, loot, onCollect, onNextFloor }: VictoryScreenProps) {
   const [showLoot, setShowLoot] = useState(false);
   const [collected, setCollected] = useState(false);
+  const { spawnFlyingItem } = useAnimation();
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     // Reveal loot after delay
@@ -28,6 +32,20 @@ export function VictoryScreen({ floor, loot, onCollect, onNextFloor }: VictorySc
   }, []);
 
   const handleCollect = () => {
+      // Trigger animations for all items
+      loot.forEach((item, index) => {
+          const el = itemRefs.current[index];
+          if (el) {
+              const rect = el.getBoundingClientRect();
+              const color = RARITY_COLORS[item.rarity].text; // pass tailwind class or hex
+              // Add small delay per item for effect
+              setTimeout(() => {
+                  spawnFlyingItem(rect, <div className="text-2xl">{item.icon}</div>, color);
+              }, index * 100);
+          }
+      });
+
+      // Actual collection logic
       onCollect();
       setCollected(true);
   };
@@ -50,7 +68,12 @@ export function VictoryScreen({ floor, loot, onCollect, onNextFloor }: VictorySc
                     loot.map((item, index) => {
                         const style = RARITY_COLORS[item.rarity];
                         return (
-                            <div key={index} className={`flex items-center gap-3 p-3 rounded-xl border ${style.bg} ${style.border} animate-in slide-in-from-bottom-4`} style={{ animationDelay: `${index * 100}ms` }}>
+                            <div 
+                                key={index} 
+                                ref={el => itemRefs.current[index] = el}
+                                className={`flex items-center gap-3 p-3 rounded-xl border ${style.bg} ${style.border} animate-in slide-in-from-bottom-4`} 
+                                style={{ animationDelay: `${index * 100}ms` }}
+                            >
                                 <div className="text-2xl">{item.icon}</div>
                                 <div className="flex-1 text-left">
                                     <div className={`font-bold text-sm ${style.text}`}>{item.name}</div>

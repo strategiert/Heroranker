@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Hero, ExternalHero } from '../types';
 import { GameState } from "../types/economy";
@@ -53,6 +54,41 @@ const cleanJson = (text: string): string => {
   return clean;
 };
 
+// --- K.O.R.A. BEHAVIOR ENGINE ---
+
+export const generateKoraComment = async (action: string, contextData: string): Promise<string> => {
+    const ai = getAiClient();
+    
+    const systemInstruction = `Du bist K.O.R.A., eine sarkastische, hochentwickelte Basis-KI in einem Sci-Fi Spiel.
+    Deine Persönlichkeit:
+    - Du hältst dich für schlauer als den Spieler ("Commander").
+    - Du machst dich gerne lustig über schlechte Entscheidungen, bist aber im Kern hilfreich.
+    - Dein Humor ist trocken, technisch und leicht herablassend (GLaDOS Style).
+    - Antworte KURZ (maximal 1-2 Sätze).
+    - Keine Anführungszeichen.
+    `;
+
+    const prompt = `Der Spieler hat folgende Aktion ausgeführt: "${action}".
+    Kontext: ${contextData}
+    
+    Gib einen kurzen, witzigen oder sarkastischen Kommentar dazu ab.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview', // Fast model for UI responsiveness
+            contents: prompt,
+            config: {
+                systemInstruction: systemInstruction,
+                maxOutputTokens: 100,
+                temperature: 1.1 // High creativity
+            }
+        });
+        return response.text || "Systemfehler. Meine Witze-Datenbank lädt noch.";
+    } catch (e) {
+        return "Verbindung unterbrochen. Du hast Glück, ich wollte gerade etwas Gemeines sagen.";
+    }
+};
+
 // --- CORE GAME HERO GENERATION ---
 
 // Generates the JSON data for a hero
@@ -89,15 +125,20 @@ export const generateHeroData = async (prompt: string): Promise<Hero> => {
     throw new Error("KI-Antwort konnte nicht verarbeitet werden.");
   }
   
-  // Generate Image
+  // Generate Image AND Sprite Sheet in parallel
   // Combine race, gender and visual description for best results
   const visualPrompt = `${data.appearance.race} ${data.appearance.gender}, ${data.description}`;
-  const imageUrl = await generateHeroImage(visualPrompt);
+  
+  const [imageUrl, spriteSheetUrl] = await Promise.all([
+      generateHeroImage(visualPrompt),
+      generateHeroSprites(visualPrompt)
+  ]);
 
   return {
     ...data,
     id: crypto.randomUUID(),
-    image: { url: imageUrl } 
+    image: { url: imageUrl },
+    sprites: { sheet: spriteSheetUrl }
   };
 };
 
@@ -151,12 +192,18 @@ export const transformHero = async (externalHero: ExternalHero): Promise<Hero> =
 
   // Generate the visual representation based on the new description
   const visualPrompt = `${data.name}, ${data.appearance.race}, ${data.description}`;
-  const imageUrl = await generateHeroImage(visualPrompt);
+  
+  // Parallel generation of Portrait and Game Sprites
+  const [imageUrl, spriteSheetUrl] = await Promise.all([
+      generateHeroImage(visualPrompt),
+      generateHeroSprites(visualPrompt)
+  ]);
 
   return {
     ...data,
     id: crypto.randomUUID(),
-    image: { url: imageUrl }
+    image: { url: imageUrl },
+    sprites: { sheet: spriteSheetUrl }
   };
 };
 
@@ -210,7 +257,6 @@ export const generateHeroImage = async (heroDescription: string): Promise<string
   const ai = getAiClient();
   
   // UNIFIED STYLE PROMPT: "PREMIUM HIGH-TECH ARCADE"
-  // Optimized for 30+ audience: Nostalgic heroic framing but modern rendering technology.
   const stylePrompt = `
     Character Concept Art of: ${heroDescription}.
     
@@ -249,6 +295,56 @@ export const generateHeroImage = async (heroDescription: string): Promise<string
     console.error("Fehler bei der Bildgenerierung:", error);
     return "https://picsum.photos/400/600";
   }
+};
+
+// --- NEW: GENERATE SPRITE SHEET (4 POSES) ---
+export const generateHeroSprites = async (heroDescription: string): Promise<string> => {
+    const ai = getAiClient();
+
+    // Specific request for a 4-frame sprite sheet
+    // Frame 1: Left Profile
+    // Frame 2: Right Profile
+    // Frame 3: Back view, aiming Up-Left
+    // Frame 4: Back view, aiming Up-Right
+    const prompt = `
+      Create a 2D Game Sprite Sheet for: ${heroDescription}.
+      
+      LAYOUT REQUIREMENTS:
+      - A single image containing exactly 4 character variants arranged horizontally in a row.
+      - Frame 1: Full body, Side Profile facing LEFT.
+      - Frame 2: Full body, Side Profile facing RIGHT.
+      - Frame 3: Full body, Back View turned slightly LEFT, looking UPWARDS.
+      - Frame 4: Full body, Back View turned slightly RIGHT, looking UPWARDS.
+      
+      STYLE:
+      - 2D Vector Art or Clean Pixel Art (High Res).
+      - Style: High-Tech Sci-Fi / Cyberpunk Arcade Game.
+      - Background: Solid White or Transparent (for easy cropping).
+      - Characters should be full body, distinct, and action-ready.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: prompt,
+            config: {
+                imageConfig: { aspectRatio: '4:3' } // Wide enough for a row of characters
+            }
+        });
+
+        const candidates = response.candidates;
+        if (candidates && candidates.length > 0) {
+            for (const part of candidates[0].content.parts) {
+                if (part.inlineData && part.inlineData.data) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
+            }
+        }
+        return ""; // Return empty string if failed, fallback logic in UI will use main image
+    } catch (e) {
+        console.error("Sprite Generation Failed:", e);
+        return "";
+    }
 };
 
 // --- NEW: ANIMATE HERO PORTRAIT (Veo) ---

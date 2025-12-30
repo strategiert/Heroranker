@@ -1,28 +1,17 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useMission } from '../context/MissionContext';
 import { CheckCircle2, X, Gift, Target, ListTodo, Coins, Leaf, Box, Gem, Ticket } from 'lucide-react';
+import { useAnimation } from '../context/AnimationContext';
 
 interface MissionGuideProps {
   onNavigate: (view: string) => void;
 }
 
 // Internal component for the reward splash
-const RewardSplash = ({ rewards, onComplete }: { rewards: any, onComplete: () => void }) => {
+const RewardSplash = ({ rewards, onComplete, spawnItem }: { rewards: any, onComplete: () => void, spawnItem: (rect: DOMRect, icon: React.ReactNode, color: string) => void }) => {
     const [step, setStep] = useState(0);
-
-    useEffect(() => {
-        // Sequence: 
-        // 0ms: Mount
-        // 100ms: Show Backdrop
-        // 300ms+: Pop items one by one
-        // 2000ms: Fly away / Fade out
-        // 2500ms: Complete
-        
-        const t1 = setTimeout(() => setStep(1), 50);
-        const t2 = setTimeout(() => onComplete(), 2200);
-
-        return () => { clearTimeout(t1); clearTimeout(t2); };
-    }, []);
+    const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     // Flatten rewards into an array for rendering
     const rewardList = [];
@@ -36,6 +25,34 @@ const RewardSplash = ({ rewards, onComplete }: { rewards: any, onComplete: () =>
         });
     }
 
+    useEffect(() => {
+        // Sequence: 
+        // 0ms: Mount
+        // 100ms: Show Backdrop
+        // 2000ms: Trigger Fly Animation
+        // 2500ms: Complete/Close
+        
+        const t1 = setTimeout(() => setStep(1), 50);
+        
+        const t2 = setTimeout(() => {
+            // Trigger Fly Animation for all items
+            rewardList.forEach((r, i) => {
+                const el = itemRefs.current[i];
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    // Add staggered delay
+                    setTimeout(() => {
+                        spawnItem(rect, <r.icon className={`w-8 h-8 ${r.color}`} />, r.color);
+                    }, i * 100);
+                }
+            });
+        }, 1800);
+
+        const t3 = setTimeout(() => onComplete(), 2500);
+
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    }, []);
+
     return (
         <div className={`fixed inset-0 z-[100] flex items-center justify-center pointer-events-none transition-all duration-300 ${step >= 1 ? 'bg-black/60 backdrop-blur-sm' : 'bg-transparent'}`}>
             <div className={`flex flex-col items-center gap-4 transition-all duration-500 ${step >= 1 ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
@@ -48,6 +65,7 @@ const RewardSplash = ({ rewards, onComplete }: { rewards: any, onComplete: () =>
                     {rewardList.map((r, i) => (
                         <div 
                             key={i}
+                            ref={el => itemRefs.current[i] = el}
                             className={`
                                 flex flex-col items-center justify-center w-24 h-24 rounded-2xl border-2 ${r.bg} ${r.border} backdrop-blur-md shadow-2xl
                                 animate-in zoom-in duration-300 fill-mode-both
@@ -67,6 +85,7 @@ const RewardSplash = ({ rewards, onComplete }: { rewards: any, onComplete: () =>
 
 export const MissionGuide: React.FC<MissionGuideProps> = ({ onNavigate }) => {
   const { currentMission, isCompleted, claimReward, progress, maxProgress } = useMission();
+  const { spawnFlyingItem } = useAnimation();
   const [isMinimized, setIsMinimized] = useState(false);
   const [showRewardSplash, setShowRewardSplash] = useState(false);
   const [tempRewards, setTempRewards] = useState<any>(null);
@@ -110,7 +129,7 @@ export const MissionGuide: React.FC<MissionGuideProps> = ({ onNavigate }) => {
   return (
     <>
         {showRewardSplash && tempRewards && (
-            <RewardSplash rewards={tempRewards} onComplete={handleAnimationComplete} />
+            <RewardSplash rewards={tempRewards} onComplete={handleAnimationComplete} spawnItem={spawnFlyingItem} />
         )}
 
         {/* --- MINIMIZED STATE --- */}

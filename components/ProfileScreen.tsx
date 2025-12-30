@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { 
   User, Shield, LogOut, Save, Cloud, Database, 
-  Trash2, Mail, Lock, Check, AlertCircle, RefreshCw, Key, X, Scan, FolderOpen
+  Trash2, Mail, Lock, Check, AlertCircle, RefreshCw, Key, X, Scan, FolderOpen, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithEmail, signUpWithEmail, signOut, signInWithGoogle, loadSaveGame, saveGameToCloud, isConfigured } from '../services/supabaseService';
 import { useGame } from '../context/GameContext';
 import { useInventory } from '../context/InventoryContext';
 import { useSpire } from '../context/SpireContext';
-import { AssetMonitor } from './AssetMonitor'; // NEW IMPORT
+import { AssetMonitor } from './AssetMonitor';
+import { AdminDashboard } from './AdminDashboard';
+import { checkIsAdmin } from '../services/adminService';
 
 interface ProfileScreenProps {
   onClose: () => void;
@@ -25,7 +28,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [showAssets, setShowAssets] = useState(false); // Toggle for Asset Monitor
+  const [showAssets, setShowAssets] = useState(false);
+  
+  // Admin State
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  useEffect(() => {
+      const check = async () => {
+          const admin = await checkIsAdmin();
+          setIsAdmin(admin);
+      };
+      check();
+  }, [user]);
 
   // --- ACTIONS ---
 
@@ -127,6 +142,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         <X className="w-6 h-6" />
     </button>
   );
+
+  if (showAdmin) {
+      return <AdminDashboard onClose={() => setShowAdmin(false)} />;
+  }
 
   // --- LOADING STATE ---
   if (authLoading) {
@@ -258,6 +277,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
                     </div>
                 )}
             </div>
+
+            {/* ADMIN BUTTON (HIDDEN IF NOT ADMIN) */}
+            {isAdmin && (
+                <button 
+                    onClick={() => setShowAdmin(true)}
+                    className="w-full p-4 bg-black text-red-500 font-mono font-bold uppercase tracking-widest border border-red-900 rounded-xl shadow-lg flex items-center justify-center gap-3 animate-pulse hover:bg-red-950 transition-colors"
+                >
+                    <ShieldAlert className="w-5 h-5" /> Overwatch Command
+                </button>
+            )}
 
             {/* System Status */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
